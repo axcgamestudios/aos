@@ -116,3 +116,22 @@ Stage Summary:
 - Scramjet se auto-repara; Ajustes ya no pide servidor ni base de datos.
 - Scripts de E2E reutilizables: scripts/e2e-chat-peer.mjs, e2e-chat-probe.mjs, e2e-chat-roundtrip.sh.
 - VERIFICACIÓN EN VIVO (https://axcgamestudios.github.io/aos/): boot+login OK, dock con YouTube+Mensajes, app YouTube con 14 vídeos reales y badge "sin sesión · sin Scramjet", chat MQTT ONLINE desde el origen público (cuenta @yq5b37 creada en vivo), sw.js/scramjet MIME correctos, iconos PNG servidos. 0 errores de página.
+
+---
+Task ID: 6
+Agent: main (Z.ai)
+Task: Diagnosticar y corregir "las páginas se quedan cargando" en el navegador del OS
+
+Work Log:
+- DIAGNÓSTICO (scripts/probe-wisp2.mjs): el motor propio (wss://wsn-c6o3.onrender.com/, Render free tier) acepta el WebSocket y hasta envía el CONTINUE inicial tras despertar de su sueño de inactividad, PERO los datos nunca fluyen (CONNECT cuelga sin respuesta) → la primera navegación queda en spinner eterno SIN error (nada disparaba la auto-reparación). Confirmado en caliente: 1ª prueba colgada >30 s sin datos, 60 s después HTTP 200 real en 260 ms; 5/5 OK en caliente. El respaldo público (wisp.mercurywork.shop) dio 502 transitorio y luego 3/3 OK.
+- CAUSA RAÍZ: testWisp() solo comprobaba que el WebSocket ABRIERA → un motor "medio muerto" (arranque en frío) pasaba el chequeo y ensureHealthyWisp lo daba por sano.
+- FIX 1 — testWisp honesto (engine/scramjet.ts): prueba a nivel de DATOS con protocolo wisp v1 real desde el navegador: CONNECT(example.com:80, TCP) + GET mínimo y espera del PRIMER byte DATA de vuelta (0x02); CLOSE del servidor = fallo honesto. Frameos binarios con DataView LE. Firma y nombre intactos (mismos puntos de llamada).
+- FIX 2 — failover real ANTES de navegar: doInit() ahora elige wisp con ensureHealthyWisp() (prueba honesta) antes de setTransport; MAIN 22 s de margen (arranque en frío), resto 8 s. Si el propio está medio muerto → respaldo sano aplicado de verdad.
+- FIX 3 — keepalive anti-sueño reforzado: renovación PROACTIVA del WebSocket cada 4 min (cada reapertura ES una petición entrante que resetea el temporizador de inactividad de Render; un WS abierto en silencio puede no contar), con clearTimeout contra temporizadores huérfanos y reconexión a los 20 s tras cortes.
+- FIX 4 — watchdog de carga en Safari (Safari.tsx): ventana temporal por pestaña (hangRef, stage 0/1). >22 s colgada → prueba honesta del wisp ACTIVO: si fluye (sitio lento) se da margen; si no fluye → recoverEngine + reintento con frame NUEVO (retryFreshFrame, extraído y reutilizado también por el catch de navigateTab). >44 s → error honesto visible: overlay "La página no cargó / El motor no respondió…" con botones Reintentar (push:false) y Ajustes del navegador. Ventana reiniciada en navigate/navigateTab/reload; limpiada en onLoad/urlchange/stop. Tab.error nuevo en la interfaz.
+- E2E VERIFICADO (agent-browser, dev :3000): login→Safari→example.com CARGADO (init con chequeo honesto integrado); sonda de datos desde el navegador DATA_FLOWS_OK contra el motor propio; URL muerta falla rápido (WS_ERROR_OK); es.wikipedia.org completa sin falsos positivos; navegación a IP no enrutable (203.0.113.1) → watchdog da margen a los 22 s (motor sano, sitio colgado) y a los 44 s declara overlay honesto con Reintentar/Ajustes verificados por DOM; clic en Reintentar limpia el overlay y relanza (barra de carga activa); example.com vuelve a cargar tras todo el ciclo (sin regresión); __wispKeepalive=true; 0 errores de consola; TypeScript limpio en src/.
+- DESPLIEGUE: commit main 01800fe + gh-pages a3a21c5; verificado en vivo: https://axcgamestudios.github.io/aos/ 200 y código nuevo confirmado en el chunk desplegado (84612c77ba9facca.js, mensaje "no hizo fluir datos").
+
+Stage Summary:
+- "Las páginas se quedan cargando" resuelto de raíz con 4 capas: chequeo de salud honesto (datos reales, no solo apertura de WS), failover real antes de fijar transporte, keepalive que impide que Render duerma el motor y watchdog que garantiza que NINGUNA pestaña quede en spinner eterno (diagnóstico, reintento y error honesto con botón Reintentar).
+- Evidencia: scripts/shots/watchdog-e2e-example.png; sonda reutilizable scripts/probe-wisp2.mjs.
