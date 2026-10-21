@@ -72,3 +72,26 @@ Stage Summary:
 - Buscador real (Bing RSS nativo + DDG fallback + SearXNG opcional).
 - GitHub Pages vivo y verificado: https://axcgamestadudios.github.io/aos/ (axcgamestudios.github.io/aos), código en main, deploy en gh-pages, server/wisp-server.mjs listo para desplegar el transporte propio.
 - Faltan fases 5-9 (glass extra, cuentas, mensajería, llamadas, apps/descargas extra).
+
+---
+Task ID: 4
+Agent: main (Z.ai)
+Task: YouTube 100% nativo sin Scramjet + chat real estilo WhatsApp (cuenta axcsOS ID) + estabilidad Scramjet + limpieza de Ajustes + logos recortados
+
+Work Log:
+- LOGOS: finder/calculator/axcgames (JPG no cuadrados, arte a sangre) cuadrados por replicación de bordes (sin perder arte) → PNG 512; safari/notes/settings reencuadrados con trim de alfa. public/icons actualizado (solo PNG), icons.tsx apunta a los .png.
+- YOUTUBE 100% NATIVO (src/os/services/yt.ts + src/os/apps/YouTube.tsx): API pública Piped con failover entre instancias (private.coffee ✓, ducks.party ✓, kavin, adminforge, reallyaweso), trending/búsqueda/canales/comentarios con caché 5 min; /streams para reproductor propio <video> (muxed, selector de calidad); si las fuentes libres están bloqueadas por Google (muro anti-bot de las IPs de las instancias — verificado hoy) → metadatos por noembed (CORS *) + relacionados por búsqueda + REPRODUCTOR EMBEBIDO OFICIAL (se sirve desde la IP del usuario, sin login). NUNCA Scramjet, NUNCA login. innertube descartado por CORS (github fent/node-ytdl-core#75) y bloqueo IP del sandbox. App registrada (id "youtube", icono SVG propio, dock+launchpad) + integración en Safari: parseYouTubeUrl() enruta youtube.com/youtu.be/shorts a la vista nativa dentro de la pestaña (0 peticiones al motor, historial de pestaña real, back/forward y recarga wired, título de ventana con el título real del vídeo).
+- MOTOR: recoverEngine() en engine/scramjet.ts (re-registro de SW, conexión BareMux NUEVA = SharedWorker fresco, wisp sano con testWisp), ensureHealthyWisp() cadena demo/local; Safari: auto-reparación al entrar en error (cooldown 12s) + reintento de navegación con frame nuevo tras fallo; wireFrameEvents extraído.
+- CUENTA axcsOS ID (src/os/services/account.ts): par ECDH P-256 en localStorage, @id = huella SHA-256 de la clave (6 chars Crockford), perfil (nombre/avatar/bio/estado), fingerprint/desderive/encrypt AES-GCM, genGroupKey, avatar gradiente por defecto, onAccount suscripción.
+- CHAT REAL (src/os/services/chat.ts): brokers MQTT públicos wss (emqx:8084 → hivemq:8884 → mosquitto:8081, failover + backoff + anti-kick multi-pestaña), presencia cada 45s (TTL 100s), buzón por usuario (QoS 1, sesión persistente), DM cifrados ECDH→AES-GCM, grupos (clave AES repartida cifrada por DM), acuses de lectura, typing, DEDUPE por id (QoS 1), LLMADAS WebRTC (audio/vídeo, STUN público, señalización cifrada), persistencia con recorte por cuota, media helpers (shrinkImage <210KB, voz 24kbps).
+- APP MENSAJES (rewritten): onboarding crear ID, lista de chats (último mensaje, no leídos, búsqueda), conversación estilo WhatsApp (burbujas con cola, ✓✓ azul, separadores de día, escribiendo…), composer con emojis (6 categorías), stickers (5 packs), imágenes (→ Preview), notas de voz (MediaRecorder, waveform, cancelar), grupos (crear/miembros/invitación), contactos por @id + directorio vivo, perfil propio, llamadas (modal entrante + overlay activo con mute/cámara/colgar + PiP).
+- AJUSTES: panel Cuenta = axcsOS ID (sin servidor, sin BD), panel Navegador sin URL de wisp (auto-configurado + botón "Reparar motor"), textos honestos.
+- E2E VERIFICADO (agent-browser): login→dock (YouTube+Mensajes)→YouTube tendencias 15 reales→búsqueda→watch (noembed 200 + embed + relacionados + comentarios tras auto-retry)→youtube.com en pestaña Safari (vista nativa, 0 peticiones scramjet, back/forward OK)→example.com por el motor OK→chat: crear ID, MQTT online (broker.emqx.io:8084, clientId aos2-zswba3), presencia bidireccional con peer Node real, DM CIFRADO recibido y descifrado, respuesta cifrada RECIBIDA Y DESCIFRADA por el peer, acuse de lectura, sticker renderizado; export estático verificado localmente (/aos, iconos, dock). Fix en vivo: dedupe QoS1, dedupe announce, sync barra de direcciones, cooldown de comentarios con auto-retry.
+- DESPLIEGUE: main bc55b82 + gh-pages 863bc0a (out 5.8MB + .nojekyll).
+
+Stage Summary:
+- YouTube ya no depende de Scramjet ni pide sesión: cliente nativo propio multi-fuente (Piped→noembed→embebido oficial) integrado como app y dentro de pestañas de Safari.
+- Chat REAL verificado con segunda parte independiente (Node): presencia, E2E ida y vuelta, acuses. Cero servidores que configurar.
+- Scramjet se auto-repara; Ajustes ya no pide servidor ni base de datos.
+- Scripts de E2E reutilizables: scripts/e2e-chat-peer.mjs, e2e-chat-probe.mjs, e2e-chat-roundtrip.sh.
+- VERIFICACIÓN EN VIVO (https://axcgamestudios.github.io/aos/): boot+login OK, dock con YouTube+Mensajes, app YouTube con 14 vídeos reales y badge "sin sesión · sin Scramjet", chat MQTT ONLINE desde el origen público (cuenta @yq5b37 creada en vivo), sw.js/scramjet MIME correctos, iconos PNG servidos. 0 errores de página.
