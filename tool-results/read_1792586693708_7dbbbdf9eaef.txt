@@ -1,0 +1,628 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useRef, useState } from "react";
+     4→import {
+     5→  ArrowLeft,
+     6→  Check,
+     7→  CircleUser,
+     8→  File as FileIcon,
+     9→  Group,
+    10→  Mic,
+    11→  Paperclip,
+    12→  RefreshCw,
+    13→  Search,
+    14→  Send,
+    15→  Settings2,
+    16→  Square,
+    17→  UserPlus,
+    18→  X,
+    19→} from "lucide-react";
+    20→import type { AppProps } from "../types";
+    21→import { useOS } from "../store";
+    22→import {
+    23→  type AosChat,
+    24→  type AosMessage,
+    25→  type AosUser,
+    26→  checkBackend,
+    27→  getBackendUrl,
+    28→  getChats,
+    29→  getFriends,
+    30→  getMessages,
+    31→  login as apiLogin,
+    32→  register as apiRegister,
+    33→  requestFriend,
+    34→  respondFriend,
+    35→  searchUsers,
+    36→  sendMessage,
+    37→  setToken,
+    38→  type FriendsState,
+    39→} from "../services/backend";
+    40→
+    41→/* ============================================================
+    42→   Mensajes axcsOS — mensajería real vía backend propio
+    43→   (server/aos-backend.mjs). Sin backend: pantalla de
+    44→   configuración honesta, nada simulado.
+    45→   ============================================================ */
+    46→
+    47→export default function MessagesApp(_props: AppProps) {
+    48→  const notify = useOS((s) => s.notify);
+    49→  const openApp = useOS((s) => s.openApp);
+    50→  const updateSettings = useOS((s) => s.updateSettings);
+    51→
+    52→  const [backendOk, setBackendOk] = useState<boolean | null>(null);
+    53→  const [backendDetail, setBackendDetail] = useState("");
+    54→  const [user, setUser] = useState<AosUser | null>(null);
+    55→  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+    56→  const [authErr, setAuthErr] = useState("");
+    57→  const [username, setUsername] = useState("");
+    58→  const [password, setPassword] = useState("");
+    59→  const [displayName, setDisplayName] = useState("");
+    60→
+    61→  const [view, setView] = useState<"chats" | "contacts">("chats");
+    62→  const [chats, setChats] = useState<AosChat[]>([]);
+    63→  const [activeChat, setActiveChat] = useState<string | null>(null);
+    64→  const [messages, setMessages] = useState<AosMessage[]>([]);
+    65→  const [draft, setDraft] = useState("");
+    66→  const [sending, setSending] = useState(false);
+    67→  const [friends, setFriends] = useState<FriendsState>({ friends: [], incoming: [], outgoing: [] });
+    68→  const [userQuery, setUserQuery] = useState("");
+    69→  const [found, setFound] = useState<AosUser[]>([]);
+    70→  const [recording, setRecording] = useState(false);
+    71→  const [recordErr, setRecordErr] = useState("");
+    72→
+    73→  const fileRef = useRef<HTMLInputElement>(null);
+    74→  const recorderRef = useRef<MediaRecorder | null>(null);
+    75→  const chunksRef = useRef<Blob[]>([]);
+    76→  const lastTimeRef = useRef(0);
+    77→  const scrollRef = useRef<HTMLDivElement>(null);
+    78→
+    79→  /* ---------- arranque: comprobar backend y sesión ---------- */
+    80→  useEffect(() => {
+    81→    (async () => {
+    82→      if (!getBackendUrl()) {
+    83→        setBackendOk(false);
+    84→        setBackendDetail("Sin configurar");
+    85→        return;
+    86→      }
+    87→      const r = await checkBackend();
+    88→      setBackendOk(r.ok);
+    89→      setBackendDetail(r.detail);
+    90→      if (r.ok) {
+    91→        try {
+    92→          const { me } = await import("../services/backend");
+    93→          const { user } = await me();
+    94→          setUser(user);
+    95→        } catch {
+    96→          setToken("");
+    97→        }
+    98→      }
+    99→    })();
+   100→  }, []);
+   101→
+   102→  const refreshChats = useCallback(async () => {
+   103→    if (!user) return;
+   104→    try {
+   105→      const { chats: cs } = await getChats();
+   106→      setChats(cs);
+   107→    } catch { /* backend caído: el usuario verá el error al interactuar */ }
+   108→  }, [user]);
+   109→
+   110→  useEffect(() => {
+   111→    if (!user) return;
+   112→    void refreshChats();
+   113→    const t = setInterval(() => void refreshChats(), 5000);
+   114→    return () => clearInterval(t);
+   115→  }, [user, refreshChats]);
+   116→
+   117→  /* ---------- mensajes del chat activo (polling incremental) ---------- */
+   118→  useEffect(() => {
+   119→    if (!user || !activeChat) return;
+   120→    lastTimeRef.current = 0;
+   121→    setMessages([]);
+   122→    let alive = true;
+   123→    const poll = async () => {
+   124→      try {
+   125→        const { messages: ms } = await getMessages(activeChat, lastTimeRef.current);
+   126→        if (!alive || ms.length === 0) return;
+   127→        setMessages((prev) => [...prev, ...ms]);
+   128→        lastTimeRef.current = ms[ms.length - 1].time;
+   129→        requestAnimationFrame(() => {
+   130→          scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+   131→        });
+   132→      } catch { /* ignorar fallos de polling */ }
+   133→    };
+   134→    void poll();
+   135→    const t = setInterval(poll, 2500);
+   136→    return () => {
+   137→      alive = false;
+   138→      clearInterval(t);
+   139→    };
+   140→  }, [user, activeChat]);
+   141→
+   142→  /* ---------- autenticación ---------- */
+   143→  const doAuth = async (e: React.FormEvent) => {
+   144→    e.preventDefault();
+   145→    setAuthErr("");
+   146→    try {
+   147→      const r = authMode === "login" ? await apiLogin(username, password) : await apiRegister(username, password, displayName || username);
+   148→      setToken(r.token);
+   149→      setUser(r.user);
+   150→      updateSettings({ userName: r.user.displayName, ...(r.user.avatar ? { avatar: r.user.avatar } : {}) });
+   151→      notify("messages", "Sesión iniciada", `Conectado como ${r.user.displayName}`);
+   152→    } catch (err) {
+   153→      setAuthErr(String((err as Error).message ?? err));
+   154→    }
+   155→  };
+   156→
+   157→  /* ---------- acciones ---------- */
+   158→  const send = async (body: { text?: string; attachment?: { name: string; mime: string; data: string } }) => {
+   159→    if (!activeChat || sending) return;
+   160→    setSending(true);
+   161→    try {
+   162→      await sendMessage(activeChat, body);
+   163→      setDraft("");
+   164→    } catch (err) {
+   165→      notify("messages", "No se pudo enviar", String((err as Error).message ?? err));
+   166→    } finally {
+   167→      setSending(false);
+   168→    }
+   169→  };
+   170→
+   171→  const onFile = async (f: File) => {
+   172→    if (f.size > 2 * 1024 * 1024) {
+   173→      notify("messages", "Archivo demasiado grande", "Los adjuntos tienen un límite de 2 MB");
+   174→      return;
+   175→    }
+   176→    const data = await new Promise<string>((res, rej) => {
+   177→      const r = new FileReader();
+   178→      r.onload = () => res(String(r.result).split(",")[1] || "");
+   179→      r.onerror = () => rej(new Error("No se pudo leer el archivo"));
+   180→      r.readAsDataURL(f);
+   181→    });
+   182→    await send({ attachment: { name: f.name, mime: f.type || "application/octet-stream", data } });
+   183→  };
+   184→
+   185→  const toggleRecording = async () => {
+   186→    if (recording) {
+   187→      recorderRef.current?.stop();
+   188→      return;
+   189→    }
+   190→    setRecordErr("");
+   191→    try {
+   192→      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+   193→      const mr = new MediaRecorder(stream);
+   194→      recorderRef.current = mr;
+   195→      chunksRef.current = [];
+   196→      mr.ondataavailable = (ev) => chunksRef.current.push(ev.data);
+   197→      mr.onstop = async () => {
+   198→        stream.getTracks().forEach((t) => t.stop());
+   199→        setRecording(false);
+   200→        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+   201→        if (blob.size < 512) return; // pulsación accidental
+   202→        if (blob.size > 2 * 1024 * 1024) {
+   203→          notify("messages", "Nota de voz demasiado larga", "Límite de 2 MB por adjunto");
+   204→          return;
+   205→        }
+   206→        const b64 = await new Promise<string>((res) => {
+   207→          const r = new FileReader();
+   208→          r.onload = () => res(String(r.result).split(",")[1] || "");
+   209→          r.readAsDataURL(blob);
+   210→        });
+   211→        await send({ attachment: { name: `nota-voz-${new Date().toISOString().slice(11, 19).replace(/:/g, "")}.webm`, mime: "audio/webm", data: b64 } });
+   212→      };
+   213→      mr.start();
+   214→      setRecording(true);
+   215→    } catch (e) {
+   216→      setRecordErr("Micrófono no disponible: " + String((e as Error).message ?? e));
+   217→    }
+   218→  };
+   219→
+   220→  const doSearch = async () => {
+   221→    if (userQuery.trim().length < 2) return setFound([]);
+   222→    try {
+   223→      const { users } = await searchUsers(userQuery.trim());
+   224→      setFound(users);
+   225→    } catch { /* mantener resultados previos */ }
+   226→  };
+   227→
+   228→  const refreshFriends = useCallback(async () => {
+   229→    if (!user) return;
+   230→    try {
+   231→      setFriends(await getFriends());
+   232→    } catch { /* ignore */ }
+   233→  }, [user]);
+   234→
+   235→  useEffect(() => {
+   236→    if (view === "contacts") void refreshFriends();
+   237→  }, [view, refreshFriends]);
+   238→
+   239→  /* ---------- pantallas de configuración / login ---------- */
+   240→  if (backendOk === false) {
+   241→    return (
+   242→      <SetupScreen
+   243→        detail={backendDetail}
+   244→        onSettings={() => openApp("settings", { payload: { section: "account" } })}
+   245→        onRetry={async () => {
+   246→          const r = await checkBackend();
+   247→          setBackendOk(r.ok || null);
+   248→          setBackendDetail(r.detail);
+   249→          if (r.ok) location.reload();
+   250→        }}
+   251→      />
+   252→    );
+   253→  }
+   254→
+   255→  if (backendOk === null) {
+   256→    return <Centered>Comprobando el backend de mensajería…</Centered>;
+   257→  }
+   258→
+   259→  if (!user) {
+   260→    return (
+   261→      <div className="flex h-full items-center justify-center bg-neutral-50 p-6 dark:bg-neutral-950">
+   262→        <form onSubmit={doAuth} className="glass lg-specular w-80 rounded-2xl p-5 dark:glass-dark">
+   263→          <h2 className="mb-1 text-center text-[15px] font-semibold text-neutral-800 dark:text-neutral-100">
+   264→            {authMode === "login" ? "Iniciar sesión" : "Crear cuenta"}
+   265→          </h2>
+   266→          <p className="mb-4 text-center text-[10.5px] text-neutral-400">Cuenta axcsOS (servidor propio) · {getBackendUrl()}</p>
+   267→          {authMode === "register" && (
+   268→            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Nombre visible" className="mb-2 w-full rounded-lg border border-black/10 bg-white/80 px-3 py-2 text-[12px] outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
+   269→          )}
+   270→          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Usuario" autoComplete="username" className="mb-2 w-full rounded-lg border border-black/10 bg-white/80 px-3 py-2 text-[12px] outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
+   271→          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Contraseña" autoComplete={authMode === "login" ? "current-password" : "new-password"} className="mb-1 w-full rounded-lg border border-black/10 bg-white/80 px-3 py-2 text-[12px] outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
+   272→          {authErr && <p className="mb-2 text-[10.5px] text-rose-500">{authErr}</p>}
+   273→          <button type="submit" className="mb-2 w-full rounded-lg bg-[var(--accent-os)] py-2 text-[12px] font-semibold text-white transition hover:opacity-90">
+   274→            {authMode === "login" ? "Entrar" : "Registrarme"}
+   275→          </button>
+   276→          <button type="button" onClick={() => setAuthMode(authMode === "login" ? "register" : "login")} className="w-full text-center text-[10.5px] text-[var(--accent-os)] underline">
+   277→            {authMode === "login" ? "Crear una cuenta nueva" : "Ya tengo cuenta"}
+   278→          </button>
+   279→        </form>
+   280→      </div>
+   281→    );
+   282→  }
+   283→
+   284→  const chat = chats.find((c) => c.id === activeChat);
+   285→
+   286→  /* ---------- app principal ---------- */
+   287→  return (
+   288→    <div className="flex h-full bg-white dark:bg-neutral-950">
+   289→      {/* sidebar */}
+   290→      <div className="flex w-64 shrink-0 flex-col border-r border-black/8 bg-neutral-100/80 backdrop-blur-xl dark:border-white/8 dark:bg-neutral-900/70">
+   291→        <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+   292→          {user.avatar ? (
+   293→            <img src={user.avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
+   294→          ) : (
+   295→            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 via-indigo-400 to-fuchsia-400 text-[12px] font-bold text-white">
+   296→              {user.displayName[0]?.toUpperCase()}
+   297→            </div>
+   298→          )}
+   299→          <div className="min-w-0 flex-1">
+   300→            <p className="truncate text-[12px] font-semibold text-neutral-800 dark:text-neutral-100">{user.displayName}</p>
+   301→            <p className="truncate text-[10px] text-neutral-400">@{user.username}</p>
+   302→          </div>
+   303→          <button onClick={() => setView(view === "chats" ? "contacts" : "chats")} title={view === "chats" ? "Contactos" : "Chats"} className="rounded-md p-1.5 text-neutral-500 transition hover:bg-black/10 dark:text-neutral-300 dark:hover:bg-white/10">
+   304→            {view === "chats" ? <CircleUser size={15} /> : <ArrowLeft size={15} />}
+   305→          </button>
+   306→        </div>
+   307→
+   308→        <div className="px-2 pb-2">
+   309→          <div className="flex rounded-lg bg-black/5 p-0.5 text-[10.5px] dark:bg-white/10">
+   310→            <button onClick={() => setView("chats")} className={`flex-1 rounded-md py-1 font-medium transition ${view === "chats" ? "bg-white text-neutral-800 shadow-sm dark:bg-neutral-700 dark:text-white" : "text-neutral-500"}`}>
+   311→              Chats {chats.length > 0 && `(${chats.length})`}
+   312→            </button>
+   313→            <button onClick={() => setView("contacts")} className={`flex-1 rounded-md py-1 font-medium transition ${view === "contacts" ? "bg-white text-neutral-800 shadow-sm dark:bg-neutral-700 dark:text-white" : "text-neutral-500"}`}>
+   314→              Contactos {friends.incoming.length > 0 && `· ${friends.incoming.length}⑤`}
+   315→            </button>
+   316→          </div>
+   317→        </div>
+   318→
+   319→        <div className="mac-scrollbar min-h-0 flex-1 overflow-y-auto px-2">
+   320→          {view === "chats" ? (
+   321→            chats.length === 0 ? (
+   322→              <div className="px-2 py-4 text-center text-[10.5px] leading-relaxed text-neutral-400">
+   323→                Sin conversaciones todavía.
+   324→                <br />
+   325→                Añade contactos desde la pestaña Contactos.
+   326→              </div>
+   327→            ) : (
+   328→              chats.map((c) => (
+   329→                <button
+   330→                  key={c.id}
+   331→                  onClick={() => setActiveChat(c.id)}
+   332→                  className={`mb-1 flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition ${
+   333→                    activeChat === c.id ? "bg-[var(--accent-os)]/15" : "hover:bg-black/5 dark:hover:bg-white/10"
+   334→                  }`}
+   335→                >
+   336→                  {c.avatar ? (
+   337→                    <img src={c.avatar} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+   338→                  ) : (
+   339→                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${c.type === "group" ? "bg-gradient-to-br from-emerald-400 to-teal-600" : "bg-gradient-to-br from-cyan-400 via-indigo-400 to-fuchsia-400"}`}>
+   340→                      {c.type === "group" ? <Group size={13} /> : c.name[0]?.toUpperCase()}
+   341→                    </div>
+   342→                  )}
+   343→                  <div className="min-w-0 flex-1">
+   344→                    <div className="flex items-baseline gap-1">
+   345→                      <p className="min-w-0 flex-1 truncate text-[11.5px] font-medium text-neutral-800 dark:text-neutral-100">{c.name}</p>
+   346→                      {c.last && <span className="shrink-0 text-[9px] text-neutral-400">{new Date(c.last.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+   347→                    </div>
+   348→                    <p className="truncate text-[10px] text-neutral-400">{c.last ? (c.last.from ? "Tú: " : "") + c.last.text : "Sin mensajes"}</p>
+   349→                  </div>
+   350→                  {c.unread > 0 && <span className="h-4 min-w-4 shrink-0 rounded-full bg-[var(--accent-os)] px-1 text-center text-[9px] font-bold leading-4 text-white">{c.unread}</span>}
+   351→                </button>
+   352→              ))
+   353→            )
+   354→          ) : (
+   355→            <ContactsView
+   356→              friends={friends}
+   357→              found={found}
+   358→              query={userQuery}
+   359→              onQuery={setUserQuery}
+   360→              onSearch={doSearch}
+   361→              onOpenChat={(u) => {
+   362→                const dm = chats.find((c) => c.type === "dm" && c.members.some((m) => m.id === u.id));
+   363→                if (dm) {
+   364→                  setActiveChat(dm.id);
+   365→                  setView("chats");
+   366→                }
+   367→              }}
+   368→              onRequest={async (uname) => {
+   369→                try {
+   370→                  await requestFriend(uname);
+   371→                  notify("messages", "Solicitud enviada", `Esperando respuesta de ${uname}`);
+   372→                  void refreshFriends();
+   373→                } catch (e) {
+   374→                  notify("messages", "Solicitud", String((e as Error).message ?? e));
+   375→                }
+   376→              }}
+   377→              onRespond={async (id, accept) => {
+   378→                try {
+   379→                  await respondFriend(id, accept);
+   380→                  void refreshFriends();
+   381→                  await refreshChats();
+   382→                } catch (e) {
+   383→                  notify("messages", "Solicitud", String((e as Error).message ?? e));
+   384→                }
+   385→              }}
+   386→            />
+   387→          )}
+   388→        </div>
+   389→      </div>
+   390→
+   391→      {/* conversación */}
+   392→      <div className="flex min-w-0 flex-1 flex-col">
+   393→        {chat ? (
+   394→          <>
+   395→            <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-black/8 px-4 dark:border-white/8">
+   396→              {chat.type === "group" ? (
+   397→                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-white">
+   398→                  <Group size={13} />
+   399→                </div>
+   400→              ) : chat.avatar ? (
+   401→                <img src={chat.avatar} alt="" className="h-7 w-7 rounded-full object-cover" />
+   402→              ) : (
+   403→                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 via-indigo-400 to-fuchsia-400 text-[11px] font-bold text-white">
+   404→                  {chat.name[0]?.toUpperCase()}
+   405→                </div>
+   406→              )}
+   407→              <div className="min-w-0">
+   408→                <p className="truncate text-[12.5px] font-semibold text-neutral-800 dark:text-neutral-100">{chat.name}</p>
+   409→                <p className="text-[9.5px] text-neutral-400">{chat.type === "group" ? `${chat.members.length + 1} miembros` : `@${chat.members[0]?.username ?? ""}`}</p>
+   410→              </div>
+   411→            </div>
+   412→
+   413→            <div ref={scrollRef} className="mac-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto bg-neutral-50/60 px-4 py-3 dark:bg-neutral-900/40">
+   414→              {messages.map((m) => (
+   415→                <div key={m.id} className={`flex ${m.mine ? "justify-end" : "justify-start"}`}>
+   416→                  <div className={`max-w-[72%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed shadow-sm ${m.mine ? "rounded-br-md bg-[var(--accent-os)] text-white" : "rounded-bl-md bg-white text-neutral-800 dark:bg-neutral-800 dark:text-neutral-100"}`}>
+   417→                    {!m.mine && chat.type === "group" && m.fromUser && <p className="mb-0.5 text-[9.5px] font-semibold opacity-70">{m.fromUser.displayName}</p>}
+   418→                    {m.text && <p className="whitespace-pre-wrap break-words">{m.text}</p>}
+   419→                    {m.attachment && <Attachment m={m} />}
+   420→                    <p className={`mt-0.5 text-right text-[8.5px] ${m.mine ? "text-white/70" : "text-neutral-400"}`}>
+   421→                      {new Date(m.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} {m.mine && <Check size={8} className="ml-0.5 inline" />}
+   422→                    </p>
+   423→                  </div>
+   424→                </div>
+   425→              ))}
+   426→              {messages.length === 0 && <p className="py-8 text-center text-[11px] text-neutral-400">Sin mensajes todavía. Escribe el primero.</p>}
+   427→            </div>
+   428→
+   429→            {recordErr && <p className="px-4 py-1 text-[10px] text-amber-600">{recordErr}</p>}
+   430→            <form
+   431→              className="flex shrink-0 items-end gap-2 border-t border-black/8 bg-white px-3 py-2.5 dark:border-white/8 dark:bg-neutral-900"
+   432→              onSubmit={(e) => {
+   433→                e.preventDefault();
+   434→                if (draft.trim()) void send({ text: draft.trim().slice(0, 4000) });
+   435→              }}
+   436→            >
+   437→              <input ref={fileRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
+   438→              <button type="button" onClick={() => fileRef.current?.click()} title="Adjuntar archivo (≤2 MB)" className="rounded-lg p-2 text-neutral-500 transition hover:bg-black/5 dark:text-neutral-300 dark:hover:bg-white/10">
+   439→                <Paperclip size={15} />
+   440→              </button>
+   441→              <button type="button" onClick={() => void toggleRecording()} title={recording ? "Detener y enviar nota de voz" : "Grabar nota de voz"} className={`rounded-lg p-2 transition ${recording ? "animate-pulse bg-rose-500/15 text-rose-500" : "text-neutral-500 hover:bg-black/5 dark:text-neutral-300 dark:hover:bg-white/10"}`}>
+   442→                {recording ? <Square size={15} /> : <Mic size={15} />}
+   443→              </button>
+   444→              <textarea
+   445→                value={draft}
+   446→                onChange={(e) => setDraft(e.target.value)}
+   447→                onKeyDown={(e) => {
+   448→                  if (e.key === "Enter" && !e.shiftKey) {
+   449→                    e.preventDefault();
+   450→                    if (draft.trim()) void send({ text: draft.trim().slice(0, 4000) });
+   451→                  }
+   452→                }}
+   453→                rows={1}
+   454→                placeholder="Mensaje…"
+   455→                className="max-h-24 min-h-9 flex-1 resize-none rounded-xl border border-black/10 bg-neutral-50 px-3 py-2 text-[12px] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
+   456→              />
+   457→              <button type="submit" disabled={sending || !draft.trim()} className="rounded-xl bg-[var(--accent-os)] p-2.5 text-white transition hover:opacity-90 disabled:opacity-40" title="Enviar">
+   458→                <Send size={14} />
+   459→              </button>
+   460→            </form>
+   461→          </>
+   462→        ) : (
+   463→          <div className="flex h-full flex-col items-center justify-center gap-2 text-neutral-400">
+   464→            <Group size={34} className="opacity-30" />
+   465→            <p className="text-[12px]">Selecciona una conversación o crea un contacto</p>
+   466→          </div>
+   467→        )}
+   468→      </div>
+   469→    </div>
+   470→  );
+   471→}
+   472→
+   473→function Attachment({ m }: { m: AosMessage }) {
+   474→  const att = m.attachment!;
+   475→  if (att.mime.startsWith("image/")) {
+   476→    return <img src={`data:${att.mime};base64,${att.data}`} alt={att.name} className="mt-1 max-h-52 rounded-xl" />;
+   477→  }
+   478→  if (att.mime.startsWith("audio/")) {
+   479→    return <audio controls src={`data:${att.mime};base64,${att.data}`} className="mt-1 h-8 w-56" />;
+   480→  }
+   481→  return (
+   482→    <a
+   483→      href={`data:${att.mime};base64,${att.data}`}
+   484→      download={att.name}
+   485→      className="mt-1 flex items-center gap-2 rounded-lg bg-black/10 px-2.5 py-1.5 text-[10.5px] font-medium underline dark:bg-white/10"
+   486→    >
+   487→      <FileIcon size={12} /> {att.name}
+   488→    </a>
+   489→  );
+   490→}
+   491→
+   492→function ContactsView({
+   493→  friends,
+   494→  found,
+   495→  query,
+   496→  onQuery,
+   497→  onSearch,
+   498→  onOpenChat,
+   499→  onRequest,
+   500→  onRespond,
+   501→}: {
+   502→  friends: FriendsState;
+   503→  found: AosUser[];
+   504→  query: string;
+   505→  onQuery: (q: string) => void;
+   506→  onSearch: () => void;
+   507→  onOpenChat: (u: AosUser) => void;
+   508→  onRequest: (username: string) => void;
+   509→  onRespond: (id: string, accept: boolean) => void;
+   510→}) {
+   511→  return (
+   512→    <div className="space-y-3 p-1">
+   513→      <form
+   514→        className="flex items-center gap-1.5 rounded-lg bg-black/5 px-2 py-1.5 dark:bg-white/10"
+   515→        onSubmit={(e) => {
+   516→          e.preventDefault();
+   517→          onSearch();
+   518→        }}
+   519→      >
+   520→        <Search size={11} className="shrink-0 text-neutral-400" />
+   521→        <input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Buscar usuarios (@usuario)…" className="w-full bg-transparent text-[11px] text-neutral-700 outline-none dark:text-neutral-200" />
+   522→      </form>
+   523→      {found.length > 0 && (
+   524→        <div>
+   525→          <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wide text-neutral-400">Resultados</p>
+   526→          {found.map((u) => (
+   527→            <div key={u.id} className="mb-0.5 flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-black/5 dark:hover:bg-white/10">
+   528→              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-fuchsia-400 text-[9px] font-bold text-white">{u.displayName[0]?.toUpperCase()}</div>
+   529→              <div className="min-w-0 flex-1">
+   530→                <p className="truncate text-[11px] font-medium text-neutral-700 dark:text-neutral-200">{u.displayName}</p>
+   531→                <p className="truncate text-[9px] text-neutral-400">@{u.username}</p>
+   532→              </div>
+   533→              <button onClick={() => onRequest(u.username)} title="Enviar solicitud" className="rounded-md p-1 text-[var(--accent-os)] transition hover:bg-[var(--accent-os)]/10">
+   534→                <UserPlus size={13} />
+   535→              </button>
+   536→            </div>
+   537→          ))}
+   538→        </div>
+   539→      )}
+   540→      {friends.incoming.length > 0 && (
+   541→        <div>
+   542→          <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wide text-neutral-400">Solicitudes recibidas</p>
+   543→          {friends.incoming.map((r) => (
+   544→            <div key={r.id} className="mb-0.5 flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-black/5 dark:hover:bg-white/10">
+   545→              <div className="min-w-0 flex-1">
+   546→                <p className="truncate text-[11px] font-medium text-neutral-700 dark:text-neutral-200">{r.from.displayName}</p>
+   547→                <p className="truncate text-[9px] text-neutral-400">@{r.from.username}</p>
+   548→              </div>
+   549→              <button onClick={() => onRespond(r.id, true)} className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[9.5px] font-semibold text-emerald-600 dark:text-emerald-400">Aceptar</button>
+   550→              <button onClick={() => onRespond(r.id, false)} className="rounded-md bg-rose-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold text-rose-500">Rechazar</button>
+   551→            </div>
+   552→          ))}
+   553→        </div>
+   554→      )}
+   555→      <div>
+   556→        <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wide text-neutral-400">Amigos ({friends.friends.length})</p>
+   557→        {friends.friends.length === 0 ? (
+   558→          <p className="px-2 py-1 text-[10px] leading-relaxed text-neutral-400">Busca por nombre de usuario y envía una solicitud de amistad.</p>
+   559→        ) : (
+   560→          friends.friends.map((u) => (
+   561→            <button key={u.id} onClick={() => onOpenChat(u)} className="mb-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-black/5 dark:hover:bg-white/10">
+   562→              {u.avatar ? (
+   563→                <img src={u.avatar} alt="" className="h-6 w-6 rounded-full object-cover" />
+   564→              ) : (
+   565→                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-fuchsia-400 text-[9px] font-bold text-white">{u.displayName[0]?.toUpperCase()}</div>
+   566→              )}
+   567→              <div className="min-w-0 flex-1">
+   568→                <p className="truncate text-[11px] font-medium text-neutral-700 dark:text-neutral-200">{u.displayName}</p>
+   569→                <p className="truncate text-[9px] text-neutral-400">@{u.username}</p>
+   570→              </div>
+   571→            </button>
+   572→          ))
+   573→        )}
+   574→      </div>
+   575→      {friends.outgoing.length > 0 && (
+   576→        <div>
+   577→          <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wide text-neutral-400">Enviadas (pendientes)</p>
+   578→          {friends.outgoing.map((r) => (
+   579→            <p key={r.id} className="px-2 py-0.5 text-[10px] text-neutral-400">@{r.to.username} — esperando respuesta</p>
+   580→          ))}
+   581→        </div>
+   582→      )}
+   583→    </div>
+   584→  );
+   585→}
+   586→
+   587→function SetupScreen({ detail, onSettings, onRetry }: { detail: string; onSettings: () => void; onRetry: () => void }) {
+   588→  return (
+   589→    <div className="flex h-full flex-col items-center justify-center gap-3 bg-neutral-50 px-6 text-center dark:bg-neutral-950">
+   590→      <div className="glass lg-specular flex max-w-md flex-col gap-3 rounded-2xl p-6 text-left dark:glass-dark">
+   591→        <div className="flex items-center gap-2">
+   592→          <Settings2 size={15} className="text-[var(--accent-os)]" />
+   593→          <h2 className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">Mensajería real: requiere backend</h2>
+   594→        </div>
+   595→        <p className="text-[11.5px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+   596→          La mensajería de axcsOS usa cuentas y almacenamiento del lado del servidor (nunca solo memoria local). Para
+   597→          usarla despliega el backend incluido en el repositorio:
+   598→        </p>
+   599→        <ol className="ml-4 list-decimal space-y-1 text-[11px] leading-relaxed text-neutral-600 dark:text-neutral-300">
+   600→          <li>Despliega <code>server/aos-backend.mjs</code> (Render/Railway/Fly/VPS, Node 18+)</li>
+   601→          <li>En Ajustes → Cuenta, pon su URL (ej. <code>https://mi-backend.example.com</code>)</li>
+   602→          <li>Regístrate y añade contactos por su nombre de usuario</li>
+   603→        </ol>
+   604→        <p className="text-[10px] text-neutral-400">Estado actual: {detail}</p>
+   605→        <div className="flex gap-2">
+   606→          <button onClick={onSettings} className="flex-1 rounded-lg bg-[var(--accent-os)] py-2 text-[11.5px] font-semibold text-white transition hover:opacity-90">
+   607→            Abrir Ajustes → Cuenta
+   608→          </button>
+   609→          <button onClick={onRetry} className="flex items-center gap-1.5 rounded-lg border border-black/10 px-3 py-2 text-[11.5px] font-medium text-neutral-600 transition hover:bg-black/5 dark:border-white/15 dark:text-neutral-300 dark:hover:bg-white/10">
+   610→            <RefreshCw size={12} /> Reintentar
+   611→          </button>
+   612→        </div>
+   613→      </div>
+   614→    </div>
+   615→  );
+   616→}
+   617→
+   618→function Centered({ children }: { children: React.ReactNode }) {
+   619→  return (
+   620→    <div className="flex h-full items-center justify-center bg-neutral-50 text-[12px] text-neutral-400 dark:bg-neutral-950">
+   621→      <div className="flex items-center gap-2">
+   622→        <X size={13} className="opacity-0" />
+   623→        {children}
+   624→      </div>
+   625→    </div>
+   626→  );
+   627→}
+   628→

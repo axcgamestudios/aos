@@ -7,26 +7,16 @@ import { useOS } from "../store";
 import { ACCENTS, CUSTOM_WALLPAPER_ID, WALLPAPERS } from "../wallpapers";
 import { PearLogo } from "../icons";
 import {
-  checkBackend,
-  getBackendUrl,
-  login as apiLoginFn,
-  logout as apiLogoutFn,
-  me as apiMeFn,
-  register as apiRegisterFn,
-  setBackendUrl,
-  setToken,
-} from "../services/backend";
-import {
   BAREMUX_VERSION,
   DEMO_WISP,
   LIBCURL_VERSION,
   SCRAMJET_VERSION,
-  applyTransport,
   getDiagnostics,
   onDiagnostics,
-  testWisp,
+  recoverEngine,
   type EngineDiagnostics,
 } from "../engine/scramjet";
+import { getAccount, onAccount, type AosIdProfile } from "../services/account";
 type Pane = "appearance" | "wallpaper" | "dock" | "browser" | "account" | "general";
 
 const PANES: { id: Pane; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
@@ -380,137 +370,117 @@ function AccountPane() {
   const update = useOS((s) => s.updateSettings);
   const notify = useOS((s) => s.notify);
   const openApp = useOS((s) => s.openApp);
-  const [url, setUrl] = useState("");
-  const [checking, setChecking] = useState(false);
-  const [status, setStatus] = useState<{ ok: boolean; detail: string } | null>(null);
-  const [user, setUser] = useState<{ username: string; displayName: string } | null>(null);
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [form, setForm] = useState({ username: "", password: "", displayName: "" });
-  const [err, setErr] = useState("");
+  const [account, setAccount] = useState<AosIdProfile | null>(null);
+  const [ready, setReady] = useState(false);
+  const [name, setName] = useState("");
 
   useEffect(() => {
-    setUrl(getBackendUrl());
-    checkBackend().then(setStatus);
-    if (getBackendUrl()) {
-      apiMeFn()
-        .then((r) => setUser(r.user))
-        .catch(() => setUser(null));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const acc = getAccount();
+    setAccount(acc);
+    setName(acc?.name ?? "");
+    setReady(true);
+    return onAccount((p) => {
+      setAccount(p);
+      setName(p?.name ?? "");
+    });
   }, []);
 
-  const apply = async () => {
-    setChecking(true);
-    setStatus(null);
-    setBackendUrl(url);
-    const r = await checkBackend(url);
-    setStatus(r);
-    setChecking(false);
-    if (r.ok) {
-      apiMeFn()
-        .then((m) => setUser(m.user))
-        .catch(() => setUser(null));
-    }
+  const saveName = () => {
+    if (!account) return;
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === account.name) return;
+    import("../services/account").then((m) => {
+      m.updateProfile({ name: trimmed });
+      update({ userName: trimmed });
+      notify("settings", "Cuenta axcsOS", "Nombre actualizado");
+    });
   };
 
-  const doAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErr("");
-    try {
-      const r = mode === "login" ? await apiLoginFn(form.username, form.password) : await apiRegisterFn(form.username, form.password, form.displayName || form.username);
-      setUser(r.user);
-      update({ userName: r.user.displayName, ...(r.user.avatar ? { avatar: r.user.avatar } : {}) });
-      notify("settings", "Cuenta axcsOS", `Sesión iniciada como ${r.user.displayName}`);
-    } catch (e2) {
-      setErr(String((e2 as Error).message ?? e2));
-    }
-  };
-
-  const doLogout = async () => {
-    try { await apiLogoutFn(); } catch { /* el token caduca solo */ }
-    setToken("");
-    setUser(null);
-    notify("settings", "Cuenta axcsOS", "Sesión cerrada");
-  };
+  if (!ready) return <div className="p-6" />;
 
   return (
     <>
-      <Card title="Cuenta axcsOS">
-        <Row>
-          <div className="min-w-0">
-            <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Estado</p>
-            <p className="text-[10.5px] leading-relaxed text-neutral-400">
-              Cuenta propia del sistema (no es Apple ID ni un servicio de terceros). Registro, sesión y mensajería
-              persisten en TU servidor. Sin backend configurado, el sistema funciona en modo local.
-            </p>
-          </div>
-          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${user ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : status?.ok ? "bg-amber-500/15 text-amber-600" : "bg-neutral-500/15 text-neutral-500"}`}>
-            {user ? `@${user.username}` : status?.ok ? "Backend listo, sin sesión" : "Modo local"}
-          </span>
-        </Row>
-        <Row>
-          <div className="min-w-0 flex-1">
-            <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Servidor de cuentas y mensajería</p>
-            <p className="mb-2 text-[10.5px] leading-relaxed text-neutral-400">
-              Despliega <code>server/aos-backend.mjs</code> (Node 18+, sin dependencias) y pon aquí su URL.
-            </p>
-            <div className="flex gap-2">
-              <input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                spellCheck={false}
-                placeholder="https://mi-backend.example.com"
-                className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
-              />
-              <button onClick={apply} disabled={checking} className="shrink-0 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
-                {checking ? "…" : "Conectar"}
-              </button>
-            </div>
-            {status && <p className={`mt-1.5 text-[10.5px] ${status.ok ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600"}`}>{status.ok ? "✓ " : "⚠ "}{status.detail}</p>}
-          </div>
-        </Row>
-        {status?.ok && (
-          <Row>
-            {user ? (
-              <div className="flex w-full min-w-0 items-center gap-3">
-                {settings.avatar ? <img src={settings.avatar} alt="" className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-fuchsia-400 text-[13px] font-bold text-white">{user.displayName[0]}</div>}
+      <Card title="axcsOS ID">
+        {account ? (
+          <>
+            <Row>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                {account.avatar ? (
+                  <img src={account.avatar} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover" />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#25d366] to-[#128c7e] text-[17px] font-bold text-white">
+                    {account.name[0]?.toUpperCase() ?? "A"}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12.5px] font-medium text-neutral-800 dark:text-neutral-100">{user.displayName}</p>
-                  <p className="truncate text-[10px] text-neutral-400">@{user.username} · sincronizado con el perfil del sistema</p>
+                  <p className="truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{account.name}</p>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(`@${account.id}`);
+                      notify("settings", "ID copiado", `@${account.id} está en el portapapeles`);
+                    }}
+                    className="text-[10.5px] text-neutral-400 transition hover:text-[var(--accent-os)]"
+                    title="Copiar ID"
+                  >
+                    @{account.id} · copiar
+                  </button>
+                  <p className="text-[10px] text-neutral-400">Cuenta del sistema · usada por Mensajes y llamadas</p>
                 </div>
-                <button onClick={doLogout} className="flex shrink-0 items-center gap-1 rounded-md border border-black/10 px-2.5 py-1 text-[11px] font-medium text-neutral-600 transition hover:bg-black/5 dark:border-white/15 dark:text-neutral-300 dark:hover:bg-white/10">
-                  <LogOut size={11} /> Cerrar sesión
-                </button>
+                <span className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">activa</span>
               </div>
-            ) : (
-              <form onSubmit={doAuth} className="w-full min-w-0">
-                <div className="mb-2 flex gap-2">
-                  {mode === "register" && (
-                    <input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder="Nombre visible" className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="Usuario" autoComplete="username" className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
-                  <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} type="password" placeholder="Contraseña" className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
-                  <button type="submit" className="flex shrink-0 items-center gap-1 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white">
-                    <LogIn size={11} /> {mode === "login" ? "Entrar" : "Crear"}
+            </Row>
+            <Row>
+              <div className="min-w-0 flex-1">
+                <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Nombre visible</p>
+                <div className="mt-1.5 flex gap-2">
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
+                  />
+                  <button onClick={saveName} className="shrink-0 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:opacity-90">
+                    Guardar
                   </button>
                 </div>
-                {err && <p className="mt-1.5 text-[10.5px] text-rose-500">{err}</p>}
-                <button type="button" onClick={() => setMode(mode === "login" ? "register" : "login")} className="mt-1.5 text-[10.5px] text-[var(--accent-os)] underline">
-                  {mode === "login" ? "Crear una cuenta nueva" : "Ya tengo cuenta"}
-                </button>
-              </form>
-            )}
+              </div>
+            </Row>
+            <Row>
+              <div className="min-w-0">
+                <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Perfil completo</p>
+                <p className="text-[10.5px] text-neutral-400">Foto, info y estado se gestionan en Mensajes → Mi perfil</p>
+              </div>
+              <button
+                onClick={() => openApp("messages")}
+                className="shrink-0 rounded-md border border-black/10 px-3 py-1.5 text-[11px] font-medium text-neutral-600 transition hover:bg-black/5 dark:border-white/15 dark:text-neutral-300 dark:hover:bg-white/10"
+              >
+                Abrir Mensajes
+              </button>
+            </Row>
+          </>
+        ) : (
+          <Row>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Sin cuenta todavía</p>
+              <p className="text-[10.5px] leading-relaxed text-neutral-400">
+                El axcsOS ID es la cuenta del sistema: da identidad a Mensajes, llamadas y grupos con cifrado de extremo
+                a extremo. Se crea en este dispositivo en segundos y no requiere configurar nada.
+              </p>
+            </div>
+            <button
+              onClick={() => openApp("messages")}
+              className="shrink-0 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:opacity-90"
+            >
+              Crear cuenta
+            </button>
           </Row>
         )}
       </Card>
-      <Card title="Seguridad">
+      <Card title="Cómo funciona tu cuenta">
         <div className="px-4 py-3 text-[10.5px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-          Las contraseñas se guardan con <b>scrypt + salt</b> en el servidor, nunca en texto plano ni en este
-          dispositivo. La sesión usa un token Bearer (equivalente a una cookie de sesión) y caduca a los 30 días.
-          Ningún usuario puede leer conversaciones ajenas: el backend comprueba el acceso en cada petición.
-          La mensajería requiere backend propio por diseño: GitHub Pages es estático.
+          El axcsOS ID vive en este dispositivo: se genera un par de claves <b>ECDH P-256</b> y tu <b>@id</b> se deriva de la
+          huella de la clave pública. Los mensajes directos se cifran de extremo a extremo con <b>AES-GCM 256</b>; las
+          llamadas viajan P2P con <b>WebRTC</b>. No hay servidor de cuentas que configurar: la mensajería usa brokers
+          públicos MQTT con failover automático y todo lo demás queda en tu navegador.
         </div>
       </Card>
     </>
@@ -523,33 +493,23 @@ function BrowserPane() {
   const updateBrowser = useOS((s) => s.updateBrowser);
   const notify = useOS((s) => s.notify);
   const clearHistory = useOS((s) => s.clearHistory);
-  const [wispInput, setWispInput] = useState(browser.wispUrl);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
   const [diag, setDiag] = useState<EngineDiagnostics>(getDiagnostics());
+  const [repairing, setRepairing] = useState(false);
 
   useEffect(() => onDiagnostics(setDiag), []);
-  useEffect(() => setWispInput(browser.wispUrl), [browser.wispUrl]);
 
-  const runTest = async () => {
-    setTesting(true);
-    setTestResult(null);
-    const r = await testWisp(wispInput);
-    setTestResult(r);
-    setTesting(false);
-  };
-
-  const applyWisp = async () => {
-    updateBrowser({ wispUrl: wispInput });
+  const repair = async () => {
+    setRepairing(true);
     try {
-      await applyTransport(wispInput);
-      notify("settings", "Transporte actualizado", `Navegando vía ${wispInput}`);
+      await recoverEngine("manual desde Ajustes");
+      notify("settings", "Motor de navegación", "Reparación completada");
     } catch (e) {
-      notify("settings", "Transporte", `Se aplicará al reiniciar el motor (${String((e as Error).message ?? e).slice(0, 60)})`);
+      notify("settings", "Motor de navegación", `No se pudo reparar: ${String((e as Error).message ?? e).slice(0, 80)}`);
+    } finally {
+      setRepairing(false);
     }
   };
 
-  const isDemo = browser.wispUrl === DEMO_WISP;
   const statusColor =
     diag.status === "ready" ? "bg-emerald-500" : diag.status === "error" ? "bg-rose-500" : diag.status === "loading" ? "bg-amber-500" : "bg-neutral-400";
 
@@ -560,7 +520,7 @@ function BrowserPane() {
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-200">
               <span className={`h-2 w-2 shrink-0 rounded-full ${statusColor}`} />
-              Estado: <b>{diag.status === "ready" ? "activo" : diag.status === "loading" ? "iniciando" : diag.status === "error" ? "error" : "en espera"}</b>
+              Estado: <b>{diag.status === "ready" ? "activo" : diag.status === "loading" ? "iniciando o reparando" : diag.status === "error" ? "error" : "en espera"}</b>
             </p>
             <p className="mt-0.5 text-[10.5px] text-neutral-400">
               Scramjet {SCRAMJET_VERSION} · BareMux {BAREMUX_VERSION} · libcurl {LIBCURL_VERSION}
@@ -575,46 +535,28 @@ function BrowserPane() {
           <div className="min-w-0 flex-1">
             <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Servidor de transporte (wisp)</p>
             <p className="mb-2 text-[10.5px] leading-relaxed text-neutral-400">
-              El navegador carga los sitios a través de este servidor por WebSocket. Despliega el tuyo con{" "}
-              <code>server/wisp-server.mjs</code> (Render, Railway, Fly.io o VPS) y pon aquí su URL <code>wss://…</code>.
+              Configurado automáticamente por el sistema{diag.wispUrl ? `: ${diag.wispUrl}` : "."} Si el servidor público de
+              demostración cae, axcsOS lo detecta, prueba alternativas y reconecta solo.
             </p>
             <div className="flex gap-2">
-              <input
-                value={wispInput}
-                onChange={(e) => setWispInput(e.target.value)}
-                spellCheck={false}
-                placeholder="wss://tu-servidor-wisp.example.com/"
-                className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
-              />
               <button
-                onClick={runTest}
-                disabled={testing}
-                className="shrink-0 rounded-md border border-black/10 bg-white px-3 py-1.5 text-[11px] font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-200"
+                onClick={() => void repair()}
+                disabled={repairing || diag.status === "loading"}
+                className="shrink-0 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
               >
-                {testing ? "Probando…" : "Probar"}
-              </button>
-              <button
-                onClick={applyWisp}
-                className="shrink-0 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:opacity-90"
-              >
-                Aplicar
+                {repairing ? "Reparando…" : "Reparar motor"}
               </button>
             </div>
-            {testResult && (
-              <p className={`mt-1.5 text-[10.5px] ${testResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500"}`}>
-                {testResult.ok ? "✓ " : "✗ "}
-                {testResult.detail}
-              </p>
-            )}
             {diag.error && <p className="mt-1.5 text-[10.5px] text-rose-500">Motor: {diag.error}</p>}
           </div>
         </Row>
-        {isDemo && (
+        {diag.wispUrl === DEMO_WISP && (
           <div className="flex items-start gap-2 border-t border-black/5 bg-amber-500/10 px-4 py-2.5 text-[10.5px] leading-relaxed text-amber-700 dark:border-white/5 dark:text-amber-300">
             <ShieldCheck size={13} className="mt-0.5 shrink-0" />
             <span>
-              Actualmente usas el transporte público de demostración de Mercury Workshop (externo, sin garantía de disponibilidad y no controlado por ti).
-              Para un uso serio, despliega tu propio servidor wisp y configúralo arriba.
+              El sistema usa el transporte público de demostración de Mercury Workshop (externo y sin garantía de
+              disponibilidad). axcsOS vigila su salud y se recupera solo si cae; para un uso intensivo puedes desplegar tu
+              propio servidor con <code>server/wisp-server.mjs</code>.
             </span>
           </div>
         )}

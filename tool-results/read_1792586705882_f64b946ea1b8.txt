@@ -1,0 +1,502 @@
+   150→   150→                    >
+   151→   151→                      <div
+   152→   152→                        className={`flex h-11 w-16 items-center justify-center rounded-lg border-2 transition ${
+   153→   153→                          settings.appearance === mode.id
+   154→   154→                            ? "border-[var(--accent-os)]"
+   155→   155→                            : "border-black/10 dark:border-white/15"
+   156→   156→                        } ${mode.id === "light" ? "bg-white" : "bg-neutral-900"}`}
+   157→   157→                      >
+   158→   158→                        <mode.icon size={16} className={mode.id === "light" ? "text-neutral-700" : "text-amber-300"} />
+   159→   159→                      </div>
+   160→   160→                      <span className="text-[10.5px] text-neutral-500">{mode.label}</span>
+   161→   161→                    </button>
+   162→   162→                  ))}
+   163→   163→                </div>
+   164→   164→              </Row>
+   165→   165→              <Row>
+   166→   166→                <span className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Color de acento</span>
+   167→   167→                <div className="flex gap-2">
+   168→   168→                  {ACCENTS.map((a) => (
+   169→   169→                    <button
+   170→   170→                      key={a.value}
+   171→   171→                      title={a.name}
+   172→   172→                      onClick={() => update({ accent: a.value })}
+   173→   173→                      className="flex h-5 w-5 items-center justify-center rounded-full transition hover:scale-110"
+   174→   174→                      style={{ background: a.value }}
+   175→   175→                    >
+   176→   176→                      {settings.accent === a.value && <Check size={11} className="text-white" strokeWidth={3.5} />}
+   177→   177→                    </button>
+   178→   178→                  ))}
+   179→   179→                </div>
+   180→   180→              </Row>
+   181→   181→              <Row>
+   182→   182→                <div>
+   183→   183→                  <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Reducir transparencia</p>
+   184→   184→                  <p className="text-[10.5px] text-neutral-400">Sustituye el Liquid Glass por materiales opacos</p>
+   185→   185→                </div>
+   186→   186→                <Toggle checked={settings.reduceTransparency} onChange={(v) => update({ reduceTransparency: v })} />
+   187→   187→              </Row>
+   188→   188→              <Row>
+   189→   189→                <div className="min-w-0">
+   190→   190→                  <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Intensidad del desenfoque</p>
+   191→   191→                  <p className="text-[10.5px] text-neutral-400">Cuánto difumina el Liquid Glass ({settings.glassIntensity}%)</p>
+   192→   192→                </div>
+   193→   193→                <input
+   194→   194→                  type="range"
+   195→   195→                  min={0}
+   196→   196→                  max={100}
+   197→   197→                  value={settings.glassIntensity}
+   198→   198→                  onChange={(e) => update({ glassIntensity: Number(e.target.value) })}
+   199→   199→                  className="w-40 accent-[var(--accent-os)]"
+   200→   200→                />
+   201→   201→              </Row>
+   202→   202→              <Row>
+   203→   203→                <div>
+   204→   204→                  <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Velocidad de animaciones</p>
+   205→   205→                  <p className="text-[10.5px] text-neutral-400">Aplica a ventanas, Dock y paneles del sistema</p>
+   206→   206→                </div>
+   207→   207→                <div className="flex gap-2">
+   208→   208→                  {(
+   209→   209→                    [
+   210→   210→                      { id: "slow", label: "Lenta" },
+   211→   211→                      { id: "normal", label: "Normal" },
+   212→   212→                      { id: "fast", label: "Rápida" },
+   213→   213→                    ] as const
+   214→   214→                  ).map((m) => (
+   215→   215→                    <ChoiceButton key={m.id} active={settings.animSpeed === m.id} onClick={() => update({ animSpeed: m.id })} label={m.label} />
+   216→   216→                  ))}
+   217→   217→                </div>
+   218→   218→              </Row>
+   219→   219→            </Card>
+   220→   220→          </>
+   221→   221→        )}
+   222→   222→
+   223→   223→        {pane === "wallpaper" && (
+   224→   224→          <>
+   225→   225→            <Card>
+   226→   226→              <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3">
+   227→   227→                {settings.customWallpaper && (
+   228→   228→                  <button
+   229→   229→                    onClick={() => update({ wallpaper: CUSTOM_WALLPAPER_ID })}
+   230→   230→                    className="group flex flex-col gap-1.5"
+   231→   231→                  >
+   232→   232→                    <div
+   233→   233→                      className={`aspect-[16/10] rounded-lg border-2 bg-neutral-300 bg-cover bg-center transition shadow-sm group-hover:scale-[1.02] dark:bg-neutral-800 ${
+   234→   234→                        settings.wallpaper === CUSTOM_WALLPAPER_ID ? "border-[var(--accent-os)]" : "border-black/10 dark:border-white/10"
+   235→   235→                      }`}
+   236→   236→                      style={{ backgroundImage: `url(${settings.customWallpaper})` }}
+   237→   237→                    />
+   238→   238→                    <span className="text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
+   239→   239→                      {settings.customWallpaperName ?? "Personalizado"}
+   240→   240→                    </span>
+   241→   241→                  </button>
+   242→   242→                )}
+   243→   243→                {WALLPAPERS.map((w) => (
+   244→   244→                  <button key={w.id} onClick={() => update({ wallpaper: w.id })} className="group flex flex-col gap-1.5">
+   245→   245→                    <div
+   246→   246→                      className={`aspect-[16/10] rounded-lg border-2 bg-neutral-300 transition shadow-sm group-hover:scale-[1.02] dark:bg-neutral-800 ${
+   247→   247→                        settings.wallpaper === w.id ? "border-[var(--accent-os)]" : "border-black/10 dark:border-white/10"
+   248→   248→                      }`}
+   249→   249→                      style={{ background: w.css }}
+   250→   250→                    />
+   251→   251→                    <span className="text-[11px] font-medium text-neutral-600 dark:text-neutral-300">{w.name}</span>
+   252→   252→                  </button>
+   253→   253→                ))}
+   254→   254→              </div>
+   255→   255→              <WallpaperUpload
+   256→   256→                onUploaded={(dataUrl, name) => {
+   257→   257→                  update({ customWallpaper: dataUrl, customWallpaperName: name, wallpaper: CUSTOM_WALLPAPER_ID });
+   258→   258→                  notify("settings", "Fondo actualizado", "Tu imagen es ahora el fondo de pantalla.");
+   259→   259→                }}
+   260→   260→              />
+   261→   261→            </Card>
+   262→   262→          </>
+   263→   263→        )}
+   264→   264→
+   265→   265→        {pane === "dock" && (
+   266→   266→          <>
+   267→   267→            <Card>
+   268→   268→              <Row>
+   269→   269→                <span className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Tamaño de los iconos</span>
+   270→   270→                <input
+   271→   271→                  type="range"
+   272→   272→                  min={40}
+   273→   273→                  max={68}
+   274→   274→                  value={settings.dockSize}
+   275→   275→                  onChange={(e) => update({ dockSize: Number(e.target.value) })}
+   276→   276→                  className="w-44 accent-[var(--accent-os)]"
+   277→   277→                />
+   278→   278→              </Row>
+   279→   279→              <Row>
+   280→   280→                <span className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Ampliación</span>
+   281→   281→                <Toggle checked={settings.dockMagnify} onChange={(v) => update({ dockMagnify: v })} />
+   282→   282→              </Row>
+   283→   283→            </Card>
+   284→   284→            <Card title="Barra de menús">
+   285→   285→              <Row>
+   286→   286→                <span className="text-[12.5px] text-neutral-700 dark:text-neutral-200">No molestar</span>
+   287→   287→                <Toggle checked={sys.dnd} onChange={(v) => setSys({ dnd: v })} />
+   288→   288→              </Row>
+   289→   289→              <Row>
+   290→   290→                <span className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Wi-Fi</span>
+   291→   291→                <Toggle checked={sys.wifi} onChange={(v) => setSys({ wifi: v })} />
+   292→   292→              </Row>
+   293→   293→              <Row>
+   294→   294→                <span className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Bluetooth</span>
+   295→   295→                <Toggle checked={sys.bluetooth} onChange={(v) => setSys({ bluetooth: v })} />
+   296→   296→              </Row>
+   297→   297→            </Card>
+   298→   298→          </>
+   299→   299→        )}
+   300→   300→
+   301→   301→        {pane === "browser" && <BrowserPane />}
+   302→   302→
+   303→   303→        {pane === "account" && <AccountPane />}
+   304→   304→
+   305→   305→        {pane === "general" && (
+   306→   306→          <>
+   307→   307→            <Card title="Perfil">
+   308→   308→              <Row>
+   309→   309→                <div className="flex min-w-0 items-center gap-3">
+   310→   310→                  {settings.avatar ? (
+   311→   311→                    <img src={settings.avatar} alt="" className="h-10 w-10 rounded-full object-cover" />
+   312→   312→                  ) : (
+   313→   313→                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 via-indigo-400 to-fuchsia-400 text-[14px] font-bold text-white">
+   314→   314→                      {settings.userName[0]?.toUpperCase() ?? "U"}
+   315→   315→                    </div>
+   316→   316→                  )}
+   317→   317→                  <div className="min-w-0">
+   318→   318→                    <input
+   319→   319→                      value={settings.userName}
+   320→   320→                      onChange={(e) => update({ userName: e.target.value.slice(0, 24) || "Usuario" })}
+   321→   321→                      className="w-40 rounded-md border border-black/10 bg-white px-2 py-1 text-[12.5px] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
+   322→   322→                    />
+   323→   323→                    <p className="mt-1 text-[10.5px] text-neutral-400">Nombre visible en el sistema</p>
+   324→   324→                  </div>
+   325→   325→                </div>
+   326→   326→                <AvatarUpload
+   327→   327→                  onUploaded={(dataUrl) => {
+   328→   328→                    update({ avatar: dataUrl });
+   329→   329→                    notify("settings", "Avatar actualizado", "Foto de perfil guardada.");
+   330→   330→                  }}
+   331→   331→                />
+   332→   332→              </Row>
+   333→   333→            </Card>
+   334→   334→            <Card title="Acerca de">
+   335→   335→              <Row>
+   336→   336→                <div className="flex items-center gap-4">
+   337→   337→                  <PearLogo className="h-9 w-5 text-neutral-700 dark:text-neutral-200" />
+   338→   338→                  <div>
+   339→   339→                    <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">axcsOS 1.0</p>
+   340→   340→                    <p className="text-[11px] text-neutral-400">Compilación 27A1241 · Liquid Glass · Motor Scramjet {SCRAMJET_VERSION}</p>
+   341→   341→                  </div>
+   342→   342→                </div>
+   343→   343→                <button
+   344→   344→                  onClick={() => openApp("about")}
+   345→   345→                  className="rounded-md border border-black/10 bg-white px-3 py-1 text-[11.5px] font-medium text-neutral-700 transition hover:bg-neutral-50 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-200"
+   346→   346→                >
+   347→   347→                  Más información
+   348→   348→                </button>
+   349→   349→              </Row>
+   350→   350→              {[
+   351→   351→                ["Chip", "Z1 Silicon · 8 núcleos"],
+   352→   352→                ["Memoria", "16 GB"],
+   353→   353→                ["Número de serie", "Z1WEB27X0001"],
+   354→   354→                ["Pantalla", `${typeof window !== "undefined" ? window.screen.width : 1440} × ${typeof window !== "undefined" ? window.screen.height : 900}`],
+   355→   355→              ].map(([k, v]) => (
+   356→   356→                <Row key={k}>
+   357→   357→                  <span className="text-[12.5px] text-neutral-500">{k}</span>
+   358→   358→                  <span className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-200">{v}</span>
+   359→   359→                </Row>
+   360→   360→              ))}
+   361→   361→            </Card>
+   362→   362→            <Card title="Almacenamiento">
+   363→   363→              <div className="p-4">
+   364→   364→                <div className="h-3 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+   365→   365→                  <div className="h-full w-[34%] rounded-full bg-gradient-to-r from-[var(--accent-os)] to-purple-500" />
+   366→   366→                </div>
+   367→   367→                <p className="mt-2 text-[11px] text-neutral-400">171,4 GB usados de 512 GB · 251,42 GB libres</p>
+   368→   368→              </div>
+   369→   369→            </Card>
+   370→   370→          </>
+   371→   371→        )}
+   372→   372→      </div>
+   373→   373→    </div>
+   374→   374→  );
+   375→   375→}
+   376→   376→
+   377→   377→/* ================= panel Cuenta ================= */
+   378→   378→function AccountPane() {
+   379→   379→  const settings = useOS((s) => s.settings);
+   380→   380→  const update = useOS((s) => s.updateSettings);
+   381→   381→  const notify = useOS((s) => s.notify);
+   382→   382→  const openApp = useOS((s) => s.openApp);
+   383→   383→  const [url, setUrl] = useState("");
+   384→   384→  const [checking, setChecking] = useState(false);
+   385→   385→  const [status, setStatus] = useState<{ ok: boolean; detail: string } | null>(null);
+   386→   386→  const [user, setUser] = useState<{ username: string; displayName: string } | null>(null);
+   387→   387→  const [mode, setMode] = useState<"login" | "register">("login");
+   388→   388→  const [form, setForm] = useState({ username: "", password: "", displayName: "" });
+   389→   389→  const [err, setErr] = useState("");
+   390→   390→
+   391→   391→  useEffect(() => {
+   392→   392→    setUrl(getBackendUrl());
+   393→   393→    checkBackend().then(setStatus);
+   394→   394→    if (getBackendUrl()) {
+   395→   395→      apiMeFn()
+   396→   396→        .then((r) => setUser(r.user))
+   397→   397→        .catch(() => setUser(null));
+   398→   398→    }
+   399→   399→    // eslint-disable-next-line react-hooks/exhaustive-deps
+   400→   400→  }, []);
+   401→   401→
+   402→   402→  const apply = async () => {
+   403→   403→    setChecking(true);
+   404→   404→    setStatus(null);
+   405→   405→    setBackendUrl(url);
+   406→   406→    const r = await checkBackend(url);
+   407→   407→    setStatus(r);
+   408→   408→    setChecking(false);
+   409→   409→    if (r.ok) {
+   410→   410→      apiMeFn()
+   411→   411→        .then((m) => setUser(m.user))
+   412→   412→        .catch(() => setUser(null));
+   413→   413→    }
+   414→   414→  };
+   415→   415→
+   416→   416→  const doAuth = async (e: React.FormEvent) => {
+   417→   417→    e.preventDefault();
+   418→   418→    setErr("");
+   419→   419→    try {
+   420→   420→      const r = mode === "login" ? await apiLoginFn(form.username, form.password) : await apiRegisterFn(form.username, form.password, form.displayName || form.username);
+   421→   421→      setUser(r.user);
+   422→   422→      update({ userName: r.user.displayName, ...(r.user.avatar ? { avatar: r.user.avatar } : {}) });
+   423→   423→      notify("settings", "Cuenta axcsOS", `Sesión iniciada como ${r.user.displayName}`);
+   424→   424→    } catch (e2) {
+   425→   425→      setErr(String((e2 as Error).message ?? e2));
+   426→   426→    }
+   427→   427→  };
+   428→   428→
+   429→   429→  const doLogout = async () => {
+   430→   430→    try { await apiLogoutFn(); } catch { /* el token caduca solo */ }
+   431→   431→    setToken("");
+   432→   432→    setUser(null);
+   433→   433→    notify("settings", "Cuenta axcsOS", "Sesión cerrada");
+   434→   434→  };
+   435→   435→
+   436→   436→  return (
+   437→   437→    <>
+   438→   438→      <Card title="Cuenta axcsOS">
+   439→   439→        <Row>
+   440→   440→          <div className="min-w-0">
+   441→   441→            <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Estado</p>
+   442→   442→            <p className="text-[10.5px] leading-relaxed text-neutral-400">
+   443→   443→              Cuenta propia del sistema (no es Apple ID ni un servicio de terceros). Registro, sesión y mensajería
+   444→   444→              persisten en TU servidor. Sin backend configurado, el sistema funciona en modo local.
+   445→   445→            </p>
+   446→   446→          </div>
+   447→   447→          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${user ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : status?.ok ? "bg-amber-500/15 text-amber-600" : "bg-neutral-500/15 text-neutral-500"}`}>
+   448→   448→            {user ? `@${user.username}` : status?.ok ? "Backend listo, sin sesión" : "Modo local"}
+   449→   449→          </span>
+   450→   450→        </Row>
+   451→   451→        <Row>
+   452→   452→          <div className="min-w-0 flex-1">
+   453→   453→            <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Servidor de cuentas y mensajería</p>
+   454→   454→            <p className="mb-2 text-[10.5px] leading-relaxed text-neutral-400">
+   455→   455→              Despliega <code>server/aos-backend.mjs</code> (Node 18+, sin dependencias) y pon aquí su URL.
+   456→   456→            </p>
+   457→   457→            <div className="flex gap-2">
+   458→   458→              <input
+   459→   459→                value={url}
+   460→   460→                onChange={(e) => setUrl(e.target.value)}
+   461→   461→                spellCheck={false}
+   462→   462→                placeholder="https://mi-backend.example.com"
+   463→   463→                className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
+   464→   464→              />
+   465→   465→              <button onClick={apply} disabled={checking} className="shrink-0 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+   466→   466→                {checking ? "…" : "Conectar"}
+   467→   467→              </button>
+   468→   468→            </div>
+   469→   469→            {status && <p className={`mt-1.5 text-[10.5px] ${status.ok ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600"}`}>{status.ok ? "✓ " : "⚠ "}{status.detail}</p>}
+   470→   470→          </div>
+   471→   471→        </Row>
+   472→   472→        {status?.ok && (
+   473→   473→          <Row>
+   474→   474→            {user ? (
+   475→   475→              <div className="flex w-full min-w-0 items-center gap-3">
+   476→   476→                {settings.avatar ? <img src={settings.avatar} alt="" className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-fuchsia-400 text-[13px] font-bold text-white">{user.displayName[0]}</div>}
+   477→   477→                <div className="min-w-0 flex-1">
+   478→   478→                  <p className="truncate text-[12.5px] font-medium text-neutral-800 dark:text-neutral-100">{user.displayName}</p>
+   479→   479→                  <p className="truncate text-[10px] text-neutral-400">@{user.username} · sincronizado con el perfil del sistema</p>
+   480→   480→                </div>
+   481→   481→                <button onClick={doLogout} className="flex shrink-0 items-center gap-1 rounded-md border border-black/10 px-2.5 py-1 text-[11px] font-medium text-neutral-600 transition hover:bg-black/5 dark:border-white/15 dark:text-neutral-300 dark:hover:bg-white/10">
+   482→   482→                  <LogOut size={11} /> Cerrar sesión
+   483→   483→                </button>
+   484→   484→              </div>
+   485→   485→            ) : (
+   486→   486→              <form onSubmit={doAuth} className="w-full min-w-0">
+   487→   487→                <div className="mb-2 flex gap-2">
+   488→   488→                  {mode === "register" && (
+   489→   489→                    <input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder="Nombre visible" className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
+   490→   490→                  )}
+   491→   491→                </div>
+   492→   492→                <div className="flex gap-2">
+   493→   493→                  <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="Usuario" autoComplete="username" className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
+   494→   494→                  <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} type="password" placeholder="Contraseña" className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
+   495→   495→                  <button type="submit" className="flex shrink-0 items-center gap-1 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white">
+   496→   496→                    <LogIn size={11} /> {mode === "login" ? "Entrar" : "Crear"}
+   497→   497→                  </button>
+   498→   498→                </div>
+   499→   499→                {err && <p className="mt-1.5 text-[10.5px] text-rose-500">{err}</p>}
+   500→   500→                <button type="button" onClick={() => setMode(mode === "login" ? "register" : "login")} className="mt-1.5 text-[10.5px] text-[var(--accent-os)] underline">
+   501→   501→                  {mode === "login" ? "Crear una cuenta nueva" : "Ya tengo cuenta"}
+   502→   502→                </button>
+   503→   503→              </form>
+   504→   504→            )}
+   505→   505→          </Row>
+   506→   506→        )}
+   507→   507→      </Card>
+   508→   508→      <Card title="Seguridad">
+   509→   509→        <div className="px-4 py-3 text-[10.5px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+   510→   510→          Las contraseñas se guardan con <b>scrypt + salt</b> en el servidor, nunca en texto plano ni en este
+   511→   511→          dispositivo. La sesión usa un token Bearer (equivalente a una cookie de sesión) y caduca a los 30 días.
+   512→   512→          Ningún usuario puede leer conversaciones ajenas: el backend comprueba el acceso en cada petición.
+   513→   513→          La mensajería requiere backend propio por diseño: GitHub Pages es estático.
+   514→   514→        </div>
+   515→   515→      </Card>
+   516→   516→    </>
+   517→   517→  );
+   518→   518→}
+   519→   519→
+   520→   520→/* ================= panel Navegador ================= */
+   521→   521→function BrowserPane() {
+   522→   522→  const browser = useOS((s) => s.browser);
+   523→   523→  const updateBrowser = useOS((s) => s.updateBrowser);
+   524→   524→  const notify = useOS((s) => s.notify);
+   525→   525→  const clearHistory = useOS((s) => s.clearHistory);
+   526→   526→  const [wispInput, setWispInput] = useState(browser.wispUrl);
+   527→   527→  const [testing, setTesting] = useState(false);
+   528→   528→  const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
+   529→   529→  const [diag, setDiag] = useState<EngineDiagnostics>(getDiagnostics());
+   530→   530→
+   531→   531→  useEffect(() => onDiagnostics(setDiag), []);
+   532→   532→  useEffect(() => setWispInput(browser.wispUrl), [browser.wispUrl]);
+   533→   533→
+   534→   534→  const runTest = async () => {
+   535→   535→    setTesting(true);
+   536→   536→    setTestResult(null);
+   537→   537→    const r = await testWisp(wispInput);
+   538→   538→    setTestResult(r);
+   539→   539→    setTesting(false);
+   540→   540→  };
+   541→   541→
+   542→   542→  const applyWisp = async () => {
+   543→   543→    updateBrowser({ wispUrl: wispInput });
+   544→   544→    try {
+   545→   545→      await applyTransport(wispInput);
+   546→   546→      notify("settings", "Transporte actualizado", `Navegando vía ${wispInput}`);
+   547→   547→    } catch (e) {
+   548→   548→      notify("settings", "Transporte", `Se aplicará al reiniciar el motor (${String((e as Error).message ?? e).slice(0, 60)})`);
+   549→   549→    }
+   550→   550→  };
+   551→   551→
+   552→   552→  const isDemo = browser.wispUrl === DEMO_WISP;
+   553→   553→  const statusColor =
+   554→   554→    diag.status === "ready" ? "bg-emerald-500" : diag.status === "error" ? "bg-rose-500" : diag.status === "loading" ? "bg-amber-500" : "bg-neutral-400";
+   555→   555→
+   556→   556→  return (
+   557→   557→    <>
+   558→   558→      <Card title="Motor de navegación">
+   559→   559→        <Row>
+   560→   560→          <div className="min-w-0">
+   561→   561→            <p className="flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-200">
+   562→   562→              <span className={`h-2 w-2 shrink-0 rounded-full ${statusColor}`} />
+   563→   563→              Estado: <b>{diag.status === "ready" ? "activo" : diag.status === "loading" ? "iniciando" : diag.status === "error" ? "error" : "en espera"}</b>
+   564→   564→            </p>
+   565→   565→            <p className="mt-0.5 text-[10.5px] text-neutral-400">
+   566→   566→              Scramjet {SCRAMJET_VERSION} · BareMux {BAREMUX_VERSION} · libcurl {LIBCURL_VERSION}
+   567→   567→            </p>
+   568→   568→          </div>
+   569→   569→          <div className="flex shrink-0 flex-col items-end gap-1 text-[10px] text-neutral-400">
+   570→   570→            <span>{diag.swRegistered ? "SW registrado ✓" : "SW sin registrar"}</span>
+   571→   571→            <span>{diag.transportSet ? "Transporte listo ✓" : "Transporte pendiente"}</span>
+   572→   572→          </div>
+   573→   573→        </Row>
+   574→   574→        <Row>
+   575→   575→          <div className="min-w-0 flex-1">
+   576→   576→            <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Servidor de transporte (wisp)</p>
+   577→   577→            <p className="mb-2 text-[10.5px] leading-relaxed text-neutral-400">
+   578→   578→              El navegador carga los sitios a través de este servidor por WebSocket. Despliega el tuyo con{" "}
+   579→   579→              <code>server/wisp-server.mjs</code> (Render, Railway, Fly.io o VPS) y pon aquí su URL <code>wss://…</code>.
+   580→   580→            </p>
+   581→   581→            <div className="flex gap-2">
+   582→   582→              <input
+   583→   583→                value={wispInput}
+   584→   584→                onChange={(e) => setWispInput(e.target.value)}
+   585→   585→                spellCheck={false}
+   586→   586→                placeholder="wss://tu-servidor-wisp.example.com/"
+   587→   587→                className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
+   588→   588→              />
+   589→   589→              <button
+   590→   590→                onClick={runTest}
+   591→   591→                disabled={testing}
+   592→   592→                className="shrink-0 rounded-md border border-black/10 bg-white px-3 py-1.5 text-[11px] font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-200"
+   593→   593→              >
+   594→   594→                {testing ? "Probando…" : "Probar"}
+   595→   595→              </button>
+   596→   596→              <button
+   597→   597→                onClick={applyWisp}
+   598→   598→                className="shrink-0 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:opacity-90"
+   599→   599→              >
+   600→   600→                Aplicar
+   601→   601→              </button>
+   602→   602→            </div>
+   603→   603→            {testResult && (
+   604→   604→              <p className={`mt-1.5 text-[10.5px] ${testResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500"}`}>
+   605→   605→                {testResult.ok ? "✓ " : "✗ "}
+   606→   606→                {testResult.detail}
+   607→   607→              </p>
+   608→   608→            )}
+   609→   609→            {diag.error && <p className="mt-1.5 text-[10.5px] text-rose-500">Motor: {diag.error}</p>}
+   610→   610→          </div>
+   611→   611→        </Row>
+   612→   612→        {isDemo && (
+   613→   613→          <div className="flex items-start gap-2 border-t border-black/5 bg-amber-500/10 px-4 py-2.5 text-[10.5px] leading-relaxed text-amber-700 dark:border-white/5 dark:text-amber-300">
+   614→   614→            <ShieldCheck size={13} className="mt-0.5 shrink-0" />
+   615→   615→            <span>
+   616→   616→              Actualmente usas el transporte público de demostración de Mercury Workshop (externo, sin garantía de disponibilidad y no controlado por ti).
+   617→   617→              Para un uso serio, despliega tu propio servidor wisp y configúralo arriba.
+   618→   618→            </span>
+   619→   619→          </div>
+   620→   620→        )}
+   621→   621→      </Card>
+   622→   622→
+   623→   623→      <Card title="Búsqueda">
+   624→   624→        <Row>
+   625→   625→          <div className="min-w-0">
+   626→   626→            <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Motor de búsqueda</p>
+   627→   627→            <p className="text-[10.5px] text-neutral-400">Resultados reales mostrados dentro de Safari; se abren por el motor integrado.</p>
+   628→   628→          </div>
+   629→   629→          <div className="flex shrink-0 gap-2">
+   630→   630→            <ChoiceButton active={browser.searchEngine === "bing"} onClick={() => updateBrowser({ searchEngine: "bing" })} label="Bing" />
+   631→   631→            <ChoiceButton active={browser.searchEngine === "searxng"} onClick={() => updateBrowser({ searchEngine: "searxng" })} label="SearXNG" />
+   632→   632→          </div>
+   633→   633→        </Row>
+   634→   634→        {browser.searchEngine === "searxng" && (
+   635→   635→          <Row>
+   636→   636→            <div className="min-w-0 flex-1">
+   637→   637→              <p className="mb-2 text-[12.5px] text-neutral-700 dark:text-neutral-200">Instancia SearXNG (API JSON)</p>
+   638→   638→              <input
+   639→   639→                value={browser.searxngUrl}
+   640→   640→                onChange={(e) => updateBrowser({ searxngUrl: e.target.value })}
+   641→   641→                spellCheck={false}
+   642→   642→                placeholder="https://searx.example.com"
+   643→   643→                className="w-full rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
+   644→   644→              />
+   645→   645→              <p className="mt-1.5 text-[10.5px] text-neutral-400">
+   646→   646→                La instancia debe tener <code>format=json</code> habilitado. Sin configurar, Safari seguirá usando DuckDuckGo.
+   647→   647→              </p>
+   648→   648→            </div>
+   649→   649→          </Row>
+
+[showing lines 150-649 of 782; use offset=650 with limit to continue reading]

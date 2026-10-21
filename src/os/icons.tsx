@@ -488,11 +488,11 @@ const imgIcon = (src: string): IconType => ({ className }) => (
   <img src={src} alt="" className={className} draggable={false} />
 );
 
-export const FinderLogoIcon = imgIcon("icons/finder.jpg");
-export const AxcGamesLogoIcon = imgIcon("icons/axcgames.jpg");
+export const FinderLogoIcon = imgIcon("icons/finder.png");
+export const AxcGamesLogoIcon = imgIcon("icons/axcgames.png");
 export const SafariLogoIcon = imgIcon("icons/safari.png");
 export const NotesLogoIcon = imgIcon("icons/notes.png");
-export const CalculatorLogoIcon = imgIcon("icons/calculator.jpg");
+export const CalculatorLogoIcon = imgIcon("icons/calculator.png");
 export const SettingsLogoIcon = imgIcon("icons/settings.png");
 
 export const MessagesIcon: IconType = ({ className }) => (
@@ -510,5 +510,19 @@ export const MessagesIcon: IconType = ({ className }) => (
       <circle cx="32" cy="29" r="4" />
       <circle cx="42" cy="29" r="4" />
     </g>
+  </svg>
+);
+
+/* YouTube: fondo rojo con play, esquinas suaves estilo macOS */
+export const YouTubeIcon: IconType = ({ className }) => (
+  <svg viewBox="0 0 64 64" className={className} aria-hidden>
+    <defs>
+      <linearGradient id="ytG" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#ff4a45" />
+        <stop offset="1" stopColor="#d40000" />
+      </linearGradient>
+    </defs>
+    <rect x="4" y="10" width="56" height="44" rx="12" fill="url(#ytG)" />
+    <path d="M27 23.5 L43 32 L27 40.5 Z" fill="#fff" />
   </svg>
 );

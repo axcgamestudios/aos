@@ -20,15 +20,16 @@ import {
 } from "lucide-react";
 import type { AppProps } from "../types";
 import { useOS, setDownloadObjectUrl } from "../store";
+import YouTubeApp, { parseYouTubeUrl } from "./YouTube";
 import {
   appBase,
   DEMO_WISP,
   ensureEngine,
-
   engineFetch,
   getDiagnostics,
   onDiagnostics,
   onEngineDownload,
+  recoverEngine,
   streamToBlob,
   type EngineDiagnostics,
   type ScramjetControllerApi,
@@ -58,6 +59,7 @@ interface Tab {
   pinned: boolean;
   history: string[]; // historial de la pestaña (URLs/acciones)
   hIndex: number; // posición actual en el historial
+  rNonce?: number; // contador para forzar recarga de vistas nativas (YouTube)
 }
 
 interface SearchResult {
@@ -178,6 +180,18 @@ export default function SafariApp({ win }: AppProps) {
         .catch((e) => console.error("[safari] cambio de wisp:", e));
     }
   }, [browser.wispUrl, engineDiag.status, engineDiag.wispUrl]);
+
+  /* auto-reparación: si el motor entra en error (port is dead, SW muerto,
+     wisp caído…), se recupera solo con un periodo de gracia */
+  const lastRecoverRef = useRef(0);
+  useEffect(() => {
+    if (engineDiag.status !== "error") return;
+    if (Date.now() - lastRecoverRef.current < 12000) return;
+    lastRecoverRef.current = Date.now();
+    recoverEngine("error del motor")
+      .then(() => notify("safari", "Motor reparado", "Scramjet se ha recuperado automáticamente"))
+      .catch((e) => console.error("[safari] auto-reparación:", e));
+  }, [engineDiag.status, notify]);
 
   /* ---------------- descargas del motor ---------------- */
   useEffect(() => {
@@ -310,6 +324,24 @@ export default function SafariApp({ win }: AppProps) {
     [openInternalTab]
   );
 
+  /* escucha de eventos de un frame del motor (urlchange/navigate) */
+  const wireFrameEvents = useCallback(
+    (frame: ScramjetFrameApi, id: string) => {
+      frame.addEventListener("urlchange", (e) => {
+        const u = (e as unknown as { url: string }).url;
+        patchTab(id, { url: u, favicon: faviconFor(u) });
+        addHistory(u, hostOf(u));
+        // mantener la entrada actual del historial de pestaña sincronizada (SPAs)
+        setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, history: t.history.map((h, i) => (i === t.hIndex ? u : h)) } : t)));
+        readPageMetaSoon(id);
+      });
+      frame.addEventListener("navigate", () => {
+        patchTab(id, { loading: true });
+      });
+    },
+    [addHistory, patchTab, readPageMetaSoon]
+  );
+
   const navigateTab = useCallback(
     async (id: string, rawUrl: string, opts?: { push?: boolean }) => {
       const push = opts?.push !== false;
@@ -334,6 +366,13 @@ export default function SafariApp({ win }: AppProps) {
       }
       if (url.startsWith(SEARCH_PREFIX)) {
         patchTab(id, { url, title: `Búsqueda: ${decodeURIComponent(url.slice(SEARCH_PREFIX.length))}`, favicon: "", loading: false });
+        return;
+      }
+
+      // YouTube → cliente 100% nativo del OS (sin Scramjet, sin login)
+      if (parseYouTubeUrl(url)) {
+        patchTab(id, { url, title: "YouTube", favicon: faviconFor(url), loading: false });
+        addHistory(url, hostOf(url));
         return;
       }
 
@@ -366,25 +405,32 @@ export default function SafariApp({ win }: AppProps) {
           } catch { /* ignore */ }
           frame = ctrl.createFrame(iframe);
           framesRef.current.set(id, frame);
-          frame.addEventListener("urlchange", (e) => {
-            const u = (e as unknown as { url: string }).url;
-            patchTab(id, { url: u, favicon: faviconFor(u) });
-            addHistory(u, hostOf(u));
-            // mantener la entrada actual del historial de pestaña sincronizada (SPAs)
-            setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, history: t.history.map((h, i) => (i === t.hIndex ? u : h)) } : t)));
-            readPageMetaSoon(id);
-          });
-          frame.addEventListener("navigate", () => {
-            patchTab(id, { loading: true });
-          });
+          wireFrameEvents(frame, id);
         }
         frame.go(url);
       } catch (e) {
-        patchTab(id, { loading: false, title: "Error del motor" });
         console.error("[safari] navegación:", e);
+        // auto-recuperación + reintento con frame nuevo (el viejo puede estar roto)
+        try {
+          await recoverEngine("fallo de navegación");
+          const ctrl = await ensureEngine(browser.wispUrl);
+          ctrlRef.current = ctrl;
+          framesRef.current.delete(id);
+          const iframe = iframeRefs.current.get(id) ?? (await waitForIframe(id));
+          if (iframe) {
+            const fresh = ctrl.createFrame(iframe);
+            framesRef.current.set(id, fresh);
+            wireFrameEvents(fresh, id);
+            fresh.go(url);
+            return;
+          }
+        } catch (e2) {
+          console.error("[safari] recuperación:", e2);
+        }
+        patchTab(id, { loading: false, title: "Error del motor" });
       }
     },
-    [addHistory, browser.wispUrl, openInternalTab, patchTab, readPageMetaSoon, waitForIframe]
+    [addHistory, browser.wispUrl, openInternalTab, patchTab, readPageMetaSoon, waitForIframe, wireFrameEvents]
   );
 
   /* navegación inicial de la pestaña de arranque */
@@ -406,7 +452,7 @@ export default function SafariApp({ win }: AppProps) {
       setWindowTitle(winId, isStart ? "Safari" : isSearch ? `Búsqueda · Safari` : t.title.length > 42 ? t.title.slice(0, 42) + "…" : t.title || "Safari");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, tabId]);
+  }, [activeTab, tabId, activeTabData?.url]);
 
   /* título de ventana según pestaña */
   useEffect(() => {
@@ -465,6 +511,12 @@ export default function SafariApp({ win }: AppProps) {
         return;
       }
       if (!/^https?:/i.test(t.url)) return;
+      // vistas nativas (YouTube): recarga = remount
+      if (parseYouTubeUrl(t.url)) {
+        patchTab(t.id, { rNonce: Date.now(), loading: true });
+        setTimeout(() => patchTab(t.id, { loading: false }), 350);
+        return;
+      }
       const frame = framesRef.current.get(t.id);
       if (!frame) {
         void navigateTab(t.id, t.url, { push: false });
@@ -694,6 +746,16 @@ export default function SafariApp({ win }: AppProps) {
                 onOpen={(url) => navigateTab(t.id, url)}
                 onFallback={() => navigateTab(t.id, `https://html.duckduckgo.com/html/?q=${encodeURIComponent(decodeURIComponent(t.url.slice(SEARCH_PREFIX.length)))}`)}
               />
+            ) : parseYouTubeUrl(t.url) ? (
+              <YouTubeApp
+                key={`${t.id}|${t.url}|${t.rNonce ?? 0}`}
+                embedded
+                initialView={parseYouTubeUrl(t.url) ?? undefined}
+                onNavigate={(u) => navigateTab(t.id, u)}
+                onBack={() => cmd("back")}
+                canBack={t.hIndex > 0}
+                onTitle={(title) => patchTab(t.id, { title })}
+              />
             ) : (
               <iframe
                 ref={(el) => {
@@ -845,9 +907,9 @@ function SearchResultsPage({ query, engine, searxngUrl, onOpen, onFallback }: { 
 
   useEffect(() => {
     let alive = true;
-    setResults(null);
-    setError(null);
-    (async () => {
+    void (async () => {
+      setResults(null);
+      setError(null);
       try {
         let res: SearchResult[];
         if (engine === "searxng" && searxngUrl) {

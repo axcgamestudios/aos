@@ -18,6 +18,7 @@ import {
   CalculatorLogoIcon,
   SettingsLogoIcon,
   MessagesIcon,
+  YouTubeIcon,
 } from "./icons";
 import AxcGamesApp from "./apps/AxcGames";
 import SafariApp from "./apps/Safari";
@@ -31,6 +32,7 @@ import PreviewApp from "./apps/Preview";
 import AboutApp from "./apps/AboutMac";
 import DownloadsApp from "./apps/Downloads";
 import MessagesApp from "./apps/Messages";
+import YouTubeApp from "./apps/YouTube";
 
 const fileMenu: MenuDef = {
   title: "Archivo",
@@ -138,6 +140,23 @@ export const APPS: AppDef[] = [
       fileMenu,
       editMenu,
       { title: "Conversación", items: [{ label: "Nueva nota de voz", action: "openApp", actionArg: "messages" }] },
+      windowMenu,
+      helpMenu,
+    ],
+  },
+  {
+    id: "youtube",
+    name: "YouTube",
+    icon: YouTubeIcon,
+    component: YouTubeApp,
+    defaultSize: { w: 1120, h: 720 },
+    minSize: { w: 480, h: 360 },
+    showInDock: true,
+    showInLaunchpad: true,
+    menus: [
+      fileMenu,
+      editMenu,
+      { title: "Ver", items: [{ label: "Tendencias", action: "openApp", actionArg: "youtube" }] },
       windowMenu,
       helpMenu,
     ],

@@ -9,6 +9,8 @@ const DOCK_APPS = [
   "finder",
   "launchpad",
   "safari",
+  "youtube",
+  "messages",
   "axcgames",
   "notes",
   "calculator",

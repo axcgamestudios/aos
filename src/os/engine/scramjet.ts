@@ -279,6 +279,89 @@ export async function applyTransport(wispUrl: string): Promise<void> {
   updateDiag({ transportSet: true, wispUrl, status: "ready", error: undefined });
 }
 
+/* ---------- auto-recuperación ----------
+   Scramjet "se cae de la nada" por causas reales conocidas:
+   1. El SharedWorker de BareMux muere (ahorro de memoria del navegador,
+      o el wisp demo corta la conexión) → "port is dead" en cada fetch.
+   2. El Service Worker se desregistra/cuela tras una actualización.
+   3. El servidor wisp demo cae (externo, sin garantía).
+   recoverEngine() ataca las tres: re-registra el SW si hace falta, crea una
+   conexión BareMux NUEVA (SharedWorker fresco) y comprueba la salud del wisp
+   con failover a la cadena disponible. */
+let recovering: Promise<void> | null = null;
+
+async function setTransportFresh(wispUrl: string): Promise<void> {
+  const w = window as unknown as Win;
+  if (!w.BareMux) {
+    await loadScript(`${appBase()}/baremux/index.js`);
+  }
+  const w2 = window as unknown as Win;
+  if (!w2.BareMux) throw new Error("baremux no disponible");
+  const conn = new w2.BareMux.BareMuxConnection(`${appBase()}/baremux/worker.js`);
+  await conn.setTransport(`${appBase()}/libcurl/index.mjs`, [{ websocket: wispUrl }]);
+  connection = conn;
+  currentWisp = wispUrl;
+  lastWispUrl = wispUrl;
+}
+
+/** Comprueba la cadena de wisps y aplica el primero sano. Devuelve el wisp activo. */
+export async function ensureHealthyWisp(): Promise<string> {
+  const cur = currentWisp || lastWispUrl || defaultWisp();
+  const isLocal = typeof window !== "undefined" && ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+  const chain = [cur, DEMO_WISP, ...(isLocal ? [LOCAL_WISP] : [])];
+  for (const wisp of chain) {
+    const r = await testWisp(wisp, 5000);
+    if (r.ok) {
+      if (wisp !== cur) await setTransportFresh(wisp);
+      updateDiag({ wispUrl: wisp, status: controller || diag.scriptsLoaded ? "ready" : "idle", transportSet: true, error: undefined });
+      return wisp;
+    }
+  }
+  return cur; // nada sano: se queda con el actual, los reintentos lo volverán a probar
+}
+
+/** Repara el motor tras una caída. Idempotente y seguro de llamar en cualquier momento. */
+export async function recoverEngine(reason = "auto"): Promise<void> {
+  if (recovering) {
+    await recovering.catch(() => undefined);
+    return;
+  }
+  recovering = (async () => {
+    updateDiag({ status: "loading", error: `recuperando motor (${reason})` });
+    try {
+      // 1) Service Worker: re-registrar si la página dejó de estar controlada
+      try {
+        const reg = await navigator.serviceWorker.getRegistration?.(`${appBase()}/sw.js`);
+        if (!reg || !navigator.serviceWorker.controller) {
+          await navigator.serviceWorker.register(`${appBase()}/sw.js`);
+          await navigator.serviceWorker.ready;
+          updateDiag({ swRegistered: true });
+        }
+      } catch {
+        /* el SW puede seguir vivo; continuar */
+      }
+
+      // 2) wisp sano + conexión BareMux nueva (SharedWorker fresco)
+      try {
+        await ensureHealthyWisp();
+        await setTransportFresh(currentWisp || lastWispUrl || defaultWisp());
+        updateDiag({ transportSet: true, status: "ready", error: undefined });
+        return;
+      } catch {
+        /* continúa con el re-init completo */
+      }
+
+      // 3) re-init completo (controller incluido)
+      controller = null;
+      initPromise = null;
+      await ensureEngine(lastWispUrl || defaultWisp());
+    } finally {
+      recovering = null;
+    }
+  })();
+  await recovering;
+}
+
 /* ---------- descargas: el SW intercepta y emite un stream legible ---------- */
 export interface SjDownload {
   filename?: string;
