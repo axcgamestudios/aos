@@ -1,6 +1,30 @@
 # Worklog
 
 ---
+Task ID: 2
+Agent: main (Z.ai)
+Task: Restaurar axcsOS (Next.js) + logo pera + login fiel al ejemplo + Safari 100% nativo (fix 303, portadas YouTube, velocidad, streaming)
+
+Work Log:
+- Restaurada la app Next.js completa (sobrevivió en git/src tras el reset del entorno); backup inmediato + checkpoint git.
+- Logo: la pera axcsOS.png del usuario vectorizada a SVG (skimage marching squares + Catmull-Rom, IoU 0.989) → PearLogo en icons.tsx, layout.tsx (favicon), reemplazados los 5 usos (MenuBar, BootScreen, Settings, Terminal, AboutMac).
+- Wallpaper Golden Gate generado (1344x768) y puesto como default; FIX crítico: Wallpaper.tsx usaba backgroundImage con sintaxis shorthand inválida (los fondos de imagen nunca funcionaron) → background.
+- Rebranding completo a axcsOS en todos los textos (títulos, Terminal, Finder, About, notificaciones) + 🍐.
+- LoginScreen rediseñado fiel a la captura de referencia (VLM): fecha arriba + reloj 96px ultra-ligero, wallpaper visible (blur 2px), píldora password oscura, Touch ID.
+- Motor proxy server-side /api/proxy: redirect follow (FIX 303), reescritura HTML/CSS (decodeEntities FIX &amp;, pre-paso etiquetas <script src> FIX crítico), <base> inyectado, jar de cookies + CONSENT/SOCS para Google, caché LRU assets, CORS, Range para vídeo, bloqueo bucles localhost, fix 204 (runtime no permite construirlo).
+- Shim cliente inyectado: localStorage/sessionStorage/document.cookie/document.domain (sandbox opaco), fetch/XHR/window.open/setAttribute/prototipos src-href/document.write hooks, MutationObserver para contenido dinámico, fix doble-proxificación de imágenes (bucle infinito), canal de errores jserror, descargas postMessage, comandos back/forward/reload.
+- Cliente YouTube nativo (/api/proxy/yt.ts): la SPA de youtube.com no hidrata bajo proxy (anti-bot) → home/feed vía API innertube (4 temas mezclados), búsqueda vía API+fallback HTML server-rendered, watch con metadatos del player API (cliente ANDROID) + REPRODUCTOR NATIVO <video> con stream googlevideo por el proxy (itag 18) + relacionados.
+- Safari v3: iframe sandbox sin same-origin, búsqueda DuckDuckGo (sin Google/Bing), favoritos (AXCGAMES/YouTube/Wikipedia/DDG), barra streaming DRM, descargas integradas, título de página al window manager.
+- App Descargas nueva (registry + Launchpad) + slice en store con persistencia y objectURLs de sesión; migración de clave macos-web-27 → axcsos (respetando notas/ajustes, estrenando goldengate).
+- E2E verificado con agent-browser: boot→login (Golden Gate visible)→desktop→Safari→YouTube home con 24 portadas reales→clic→VÍDEO REPRODUCIÉNDOSE (fotograma real verificado)→búsqueda DDG con resultados→GitHub completamente estilizado. TypeScript limpio.
+
+Stage Summary:
+- axcsOS 1.0 completo y verificado; servidor dev persistente (setsid double-fork) en :3000.
+- Fixes de raíz: 303 (redirects), portadas YouTube (cliente nativo + proxy imágenes), velocidad (API+caché), wallpapers (bug histórico backgroundImage), bucles de doble-proxy.
+- Reproducción de vídeo YouTube NATIVA (sin DRM, stream directo). Netflix/DRM: best-effort con aviso (limitación de Widevine, no proxy).
+- Backups: download/axcsOS-backup/src-axcsOS-final-*.tar.gz + capturas de evidencia + 2 commits git (checkpoint y final).
+
+---
 Task ID: 1
 Agent: main (Z.ai)
 Task: Sistema operativo web estilo macOS 27 (Liquid Glass) con inicio de sesión y app AXCGAMES (axcgamestudios.github.io/nueva-pestana/)
