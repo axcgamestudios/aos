@@ -46,3 +46,29 @@ Stage Summary:
 - Apps: finder, axcgames, safari, notes, calculator, terminal, settings, textedit, preview, about.
 - Archivos clave: src/os/{store,registry,types,icons,wallpapers}, src/os/components/* (MenuBar, Dock, WindowFrame, WindowManager, Spotlight, Launchpad, ControlCenter, NotificationCenter, AppSwitcher, Desktop, Wallpaper, BootScreen, LoginScreen), src/os/apps/*, src/app/page.tsx, globals.css.
 - Lint 0 errores/0 warnings; dev server OK en puerto 3000.
+
+---
+Task ID: 3
+Agent: main (Z.ai)
+Task: Motor de navegador real (Scramjet) + buscador + ajustes + despliegue GitHub Pages (axcgamestudios/aos)
+
+Work Log:
+- AUDITORÍA: stack Next 16 + Turbopack, Safari v3 con /api/proxy server-side (909 líneas), proxy nativo YouTube con /api/proxy/yt.ts. Infra: sandbox con dev server :3000, sin backend público.
+- INVESTIGACIÓN MOTOR: Scramjet 1.1.0 (release GH oficial = npm igual), bare-mux 2.1.9, libcurl-transport 1.5.2 (⚠️ la 2.0.5 es incompatible con SJ 1.x: "headers is not iterable"), wisp-js 0.5.0 (backend oficial, anti-SSRF integrado). Scramjet lista GFN+YouTube como soportados. Referencia Schoolsucks descartada como dependencia (arquitectura ajena no verificable); solución propia con stack Mercury OSS.
+- Rig de pruebas (public/sjtest.html) + wisp local (:3001): example.com OK → YouTube SPA OK (portadas a color) → reproducción bloqueada por anti-bot Google (IP datacenter, documentado).
+- BUGS DE INTEGRACIÓN RESUELTOS: (1) orden init: controller ANTES que register SW (si no, IDB $scramjet sin stores → NotFoundError) + autocura deleteDatabase; (2) base() mal calculado para subrutas → SharedWorker 404 "port is dead"; (3) doble-codificación URL transitoria; (4) RACE iframe: engine caliente resuelve en microtask antes de que React monte el iframe → waitForIframe(); (5) ⚠️ ROOT CAUSE CRÍTICO: fetchs de página a sitios con set-cookie colgaban para siempre — el SW hace await dispatch(client) esperando ACK del runtime scramjet que la página del OS no tiene → ACK implementado en engine doInit (protocolo verificado en client/dom/cookie.ts); (6) engineFetch antes del init → engineEncodeUrl ahora auto-inicializa.
+- Safari v4 completo: pestañas múltiples con iframes vivos (estado preservado), historial por pestaña (back/forward real app-level + SPA urlchange sync), barra direcciones (URL/dominio/búsqueda), reload/stop/home, marcadores editables persistentes, historial global + borrado, título/favicon desde contentDocument, popups window.open y target=_blank → pestañas internas (captura en fase about:blank + click capture), descargas interceptadas por el SW → app Descargas, banner de error del motor con acceso a Ajustes, ⌘L/⌘T/⌘W.
+- Buscador: resultados reales nativos vía Bing RSS (format=rss, sin clave, funciona desde datacenter) con fallback DDG html y fallback final a DDG dentro del motor (desafío anti-bot ejecutable con JS real). SearXNG opcional configurable. DDG html endpoint = HTTP 202 anti-bot desde datacenter (limitación documentada).
+- Ajustes → Navegador: wisp URL + Probar (testWisp WebSocket) + Aplicar (applyTransport en caliente), diagnóstico del motor en vivo (scripts/SW/transporte/versión), aviso demo wisp, buscador, privacidad, créditos.
+- Settings: fondo de pantalla propio (upload → canvas resize → dataURL), avatar foto de perfil, nombre editable; LoginScreen usa avatar; wallpaper con basePath correcto (rutas relativas).
+- Iconos oficiales del estudio (repo) integrados como iconos de apps (finder/safari/notas/calculadora/settings/axcgames → imgIcon rutas relativas).
+- Export estático: next.config BUILD_TARGET=pages (output export + basePath /aos + trailingSlash + images unoptimized); scripts/serve-pages.mjs para probar el out/ bajo /aos localmente; E2E del export verificado (SW controla, example.com OK vía wisp local).
+- DESPLIEGUE: main = fuente completa (con logos preservados del repo, engine assets públicos, server/ desplegable, README); gh-pages = export + .nojekyll; Pages activado → https://axcgamestudios.github.io/aos/ VERIFICADO EN VIVO: 200, sw.js+wasm MIME correctos, SW controla, example.com + YouTube cargan vía wisp demo público.
+- Pruebas de compatibilidad (VLM + DOM): GFN landing completa a color ✓, Poki catálogo 245 imgs ✓, Netflix landing carátulas ✓ (reproducción=DRM no soportado por diseño), YouTube SPA+búsqueda interna con resultados orgánicos reales ✓ (reproducción depende de IP del wisp: anti-bot Google), Bing búsqueda nativa 10 resultados ✓, Wikipedia ✓.
+- Fases 1-4 del roadmap del usuario completadas y validadas.
+
+Stage Summary:
+- Motor Scramjet 1.1.0 integrado de verdad (SW+rewriter WASM+baremux+libcurl+wisp), 6 bugs de raíz resueltos (incl. ACK de cookies del SW), Safari v4 con pestañas/historial/marcadores/descargas/popups internos.
+- Buscador real (Bing RSS nativo + DDG fallback + SearXNG opcional).
+- GitHub Pages vivo y verificado: https://axcgamestadudios.github.io/aos/ (axcgamestudios.github.io/aos), código en main, deploy en gh-pages, server/wisp-server.mjs listo para desplegar el transporte propio.
+- Faltan fases 5-9 (glass extra, cuentas, mensajería, llamadas, apps/descargas extra).
