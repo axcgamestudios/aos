@@ -1,0 +1,326 @@
+"use client";
+
+/* ============================================================
+   Motor de navegación Scramjet para axcsOS
+   ------------------------------------------------------------
+   Cadena completa (todas las piezas verificadas):
+   página → Service Worker (scramjet.all.js) → rewriter WASM
+   → BareMux SharedWorker → transporte libcurl → wisp (WebSocket)
+   → servidor wisp → sitio real.
+
+   - Scramjet 1.1.0 (release oficial de GitHub, OSS)
+   - @mercuryworkshop/bare-mux 2.1.9
+   - @mercuryworkshop/libcurl-transport 1.5.2 (compatible con SJ 1.x)
+   - Backend wisp: @mercuryworkshop/wisp-js (ver server/ del repo)
+   Assets servidos estáticos desde /public: no requieren servidor.
+   ============================================================ */
+
+export const SCRAMJET_VERSION = "1.1.0";
+export const BAREMUX_VERSION = "2.1.9";
+export const LIBCURL_VERSION = "1.5.2";
+
+/** Transporte de demostración público de Mercury Workshop (el de la demo oficial de Scramjet). Externo y no garantizado; configurable en Ajustes. */
+export const DEMO_WISP = "wss://wisp.mercurywork.shop/";
+/** Wisp local para desarrollo (scripts/wisp-server.mjs). */
+export const LOCAL_WISP = "ws://localhost:3001/";
+
+export function defaultWisp(): string {
+  if (typeof window !== "undefined") {
+    const h = window.location.hostname;
+    if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return LOCAL_WISP;
+  }
+  return DEMO_WISP;
+}
+
+/** Ruta base de la app: '' en raíz, '/aos' en GitHub Pages. */
+export function appBase(): string {
+  if (typeof window === "undefined") return "";
+  const p = window.location.pathname.replace(/\/+$/, "");
+  if (!p) return "";
+  const seg = p.slice(p.lastIndexOf("/") + 1);
+  if (seg.includes(".")) return p.slice(0, p.lastIndexOf("/"));
+  return p;
+}
+
+/* ---------- tipos mínimos de los globals que inyecta scramjet.all.js ---------- */
+export interface ScramjetFrameApi extends EventTarget {
+  frame: HTMLIFrameElement;
+  url: URL;
+  go(url: string): void;
+  back(): void;
+  forward(): void;
+  reload(): void;
+}
+export interface ScramjetControllerApi extends EventTarget {
+  init(): Promise<void>;
+  createFrame(frame?: HTMLIFrameElement): ScramjetFrameApi;
+  encodeUrl(url: string | URL): string;
+  decodeUrl(url: string | URL): string;
+  modifyConfig(cfg: Record<string, unknown>): Promise<void>;
+}
+interface ScramjetGlobals {
+  $scramjetLoadController?: () => { ScramjetController: new (cfg: unknown) => unknown };
+  $scramjetVersion?: { version: string; build: string };
+}
+interface BareMuxGlobals {
+  BareMux?: {
+    BareMuxConnection: new (workerPath: string) => {
+      getTransport(): Promise<string>;
+      setTransport(url: string, args: unknown[], transfer?: unknown[]): Promise<void>;
+    };
+  };
+}
+
+type Win = (typeof globalThis) & ScramjetGlobals & BareMuxGlobals;
+
+declare const window: Win;
+
+/* ---------- estado del motor ---------- */
+export type EngineStatus =
+  | "idle"
+  | "loading"
+  | "ready"
+  | "error";
+
+export interface EngineDiagnostics {
+  status: EngineStatus;
+  scriptsLoaded: boolean;
+  swRegistered: boolean;
+  transportSet: boolean;
+  wispUrl: string;
+  error?: string;
+  version?: string;
+}
+
+let controller: ScramjetControllerApi | null = null;
+let connection: InstanceType<NonNullable<Win["BareMux"]>["BareMuxConnection"]> | null = null;
+let initPromise: Promise<ScramjetControllerApi> | null = null;
+let currentWisp = "";
+let lastWispUrl = "";
+let diag: EngineDiagnostics = {
+  status: "idle",
+  scriptsLoaded: false,
+  swRegistered: false,
+  transportSet: false,
+  wispUrl: "",
+};
+const diagListeners = new Set<(d: EngineDiagnostics) => void>();
+
+export function getDiagnostics(): EngineDiagnostics {
+  return { ...diag, version: SCRAMJET_VERSION };
+}
+export function onDiagnostics(cb: (d: EngineDiagnostics) => void): () => void {
+  diagListeners.add(cb);
+  return () => diagListeners.delete(cb);
+}
+function updateDiag(patch: Partial<EngineDiagnostics>) {
+  diag = { ...diag, ...patch };
+  const snapshot = getDiagnostics();
+  diagListeners.forEach((cb) => cb(snapshot));
+}
+
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[data-sj="${src}"]`);
+    if (existing) {
+      if (existing.dataset.loaded === "1") return resolve();
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`No se pudo cargar ${src}`)), { once: true });
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = false;
+    s.dataset.sj = src;
+    s.addEventListener("load", () => {
+      s.dataset.loaded = "1";
+      resolve();
+    });
+    s.addEventListener("error", () => reject(new Error(`No se pudo cargar ${src} (¿está public/scram/ completo?)`)));
+    document.head.appendChild(s);
+  });
+}
+
+/** Prueba rápida de un servidor wisp: abre un WebSocket y espera a que esté listo. */
+export function testWisp(url: string, timeoutMs = 6000): Promise<{ ok: boolean; detail: string }> {
+  return new Promise((resolve) => {
+    if (!/^wss?:\/\//i.test(url)) return resolve({ ok: false, detail: "La URL debe empezar por ws:// o wss://" });
+    let settled = false;
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      return resolve({ ok: false, detail: `URL inválida: ${String(e)}` });
+    }
+    const done = (ok: boolean, detail: string) => {
+      if (settled) return;
+      settled = true;
+      try { ws.close(); } catch { /* ignore */ }
+      resolve({ ok, detail });
+    };
+    const timer = setTimeout(() => done(false, "Tiempo de espera agotado (el servidor no respondió)"), timeoutMs);
+    ws.onopen = () => {
+      clearTimeout(timer);
+      done(true, "Conexión WebSocket establecida con el transporte");
+    };
+    ws.onerror = () => {
+      clearTimeout(timer);
+      done(false, "El servidor rechazó o no existe la conexión WebSocket");
+    };
+    ws.onclose = () => {
+      clearTimeout(timer);
+      if (!settled) done(false, "El servidor cerró la conexión inmediatamente");
+    };
+  });
+}
+
+/**
+ * Inicializa el motor completo. Orden crítico (verificado contra la app oficial):
+ * 1. cargar scripts  2. controller.init() (crea IDB con stores ANTES que el SW)
+ * 3. registrar SW     4. BareMuxConnection + setTransport(libcurl, wisp)
+ */
+export async function ensureEngine(wispUrl: string): Promise<ScramjetControllerApi> {
+  lastWispUrl = wispUrl || lastWispUrl;
+  if (!controller) {
+    if (!initPromise) initPromise = doInit(wispUrl);
+    controller = await initPromise;
+  } else if (wispUrl && wispUrl !== currentWisp) {
+    await applyTransport(wispUrl);
+  }
+  return controller;
+}
+
+async function doInit(wispUrl: string): Promise<ScramjetControllerApi> {
+  const b = appBase();
+  updateDiag({ status: "loading", wispUrl, error: undefined });
+  try {
+    await Promise.all([loadScript(`${b}/scram/scramjet.all.js`), loadScript(`${b}/baremux/index.js`)]);
+    updateDiag({ scriptsLoaded: true });
+
+    const w = window as unknown as Win;
+    if (!w.$scramjetLoadController) throw new Error("scramjet.all.js no expuso $scramjetLoadController");
+    const { ScramjetController } = w.$scramjetLoadController();
+    const ctrl = new ScramjetController({
+      prefix: `${b}/scramjet/`,
+      files: {
+        wasm: `${b}/scram/scramjet.wasm.wasm`,
+        all: `${b}/scram/scramjet.all.js`,
+        sync: `${b}/scram/scramjet.sync.js`,
+      },
+      flags: {
+        interceptDownloads: true,
+        allowInvalidJs: true,
+        allowFailedIntercepts: true,
+        captureErrors: true,
+      },
+    }) as unknown as ScramjetControllerApi;
+
+    try {
+      await ctrl.init();
+    } catch (e) {
+      // Autocura: si la BD $scramjet quedó creada sin stores (condición de carrera
+      // conocida cuando el SW arranca antes que el controller), se borra y reintenta.
+      const msg = String((e as Error)?.message ?? e);
+      if (/object store/i.test(msg)) {
+        await new Promise<void>((res) => {
+          const req = indexedDB.deleteDatabase("$scramjet");
+          req.onsuccess = req.onerror = req.onblocked = () => res();
+        });
+        await ctrl.init();
+      } else {
+        throw e;
+      }
+    }
+
+    await navigator.serviceWorker.register(`${b}/sw.js`);
+    await navigator.serviceWorker.ready;
+    updateDiag({ swRegistered: true });
+
+    // ACK del protocolo de sincronización de Scramjet: cuando una respuesta con
+    // set-cookie llega a un fetch de ESTA página (no de un iframe), el SW espera
+    // confirmación del cliente (client/dom/cookie.ts en el runtime real).
+    // Sin este ACK, las peticiones a sitios que fijan cookies colgarían para siempre.
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      const d = e.data as { scramjet$type?: string; scramjet$token?: number } | null;
+      if (d && typeof d === "object" && d.scramjet$type === "cookie" && typeof d.scramjet$token === "number") {
+        navigator.serviceWorker.controller?.postMessage({
+          scramjet$token: d.scramjet$token,
+          scramjet$type: "cookie",
+        });
+      }
+    });
+
+    const conn = new w.BareMux!.BareMuxConnection(`${b}/baremux/worker.js`);
+    connection = conn;
+    await conn.setTransport(`${b}/libcurl/index.mjs`, [{ websocket: wispUrl }]);
+    currentWisp = wispUrl;
+    lastWispUrl = wispUrl;
+    updateDiag({ transportSet: true, status: "ready", wispUrl });
+
+    // proxy global de descargas: lo conecta Safari con la app Descargas
+    ctrl.addEventListener("download", (e) => {
+      const detail = (e as unknown as { download?: SjDownload }).download;
+      if (detail?.body) downloadHandlers.forEach((h) => h(detail));
+    });
+
+    return ctrl;
+  } catch (e) {
+    updateDiag({ status: "error", error: String((e as Error)?.message ?? e) });
+    initPromise = null;
+    throw e;
+  }
+}
+
+/** Cambia el servidor wisp en caliente (Ajustes → Navegador). */
+export async function applyTransport(wispUrl: string): Promise<void> {
+  if (!connection) throw new Error("El motor aún no está inicializado");
+  await connection.setTransport(`${appBase()}/libcurl/index.mjs`, [{ websocket: wispUrl }]);
+  currentWisp = wispUrl;
+  updateDiag({ transportSet: true, wispUrl, status: "ready", error: undefined });
+}
+
+/* ---------- descargas: el SW intercepta y emite un stream legible ---------- */
+export interface SjDownload {
+  filename?: string;
+  url: string;
+  body: ReadableStream<Uint8Array>;
+  length: number;
+}
+type DownloadHandler = (d: SjDownload) => void;
+const downloadHandlers = new Set<DownloadHandler>();
+export function onEngineDownload(h: DownloadHandler): () => void {
+  downloadHandlers.add(h);
+  return () => downloadHandlers.delete(h);
+}
+
+export async function streamToBlob(d: SjDownload): Promise<Blob> {
+  const reader = d.body.getReader();
+  const chunks: BlobPart[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value as unknown as BlobPart);
+  }
+  return new Blob(chunks, { type: "application/octet-stream" });
+}
+
+/** URL ya reescrita por el motor, lista para <iframe src>. Inicializa si hace falta. */
+export async function engineEncodeUrl(url: string): Promise<string> {
+  if (!controller) await ensureEngine(lastWispUrl || defaultWisp());
+  if (!controller) throw new Error("Motor no inicializado");
+  return controller.encodeUrl(url);
+}
+
+/**
+ * fetch() de una URL real A TRAVÉS del motor (SW → wisp → sitio).
+ * La página del OS ya está controlada por el SW, así que las rutas
+ * /scramjet/ se interceptan y se sirven por el proxy.
+ */
+export async function engineFetch(url: string, init?: RequestInit): Promise<Response> {
+  const enc = await engineEncodeUrl(url);
+  return fetch(enc, init);
+}
+
+export function isEngineReady(): boolean {
+  return diag.status === "ready";
+}

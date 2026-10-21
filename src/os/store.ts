@@ -3,7 +3,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
+  Bookmark,
+  BrowserSettings,
   DownloadItem,
+  HistoryEntry,
   Note,
   OsNotification,
   OsSettings,
@@ -14,6 +17,7 @@ import type {
 } from "./types";
 import { DEFAULT_WALLPAPER } from "./wallpapers";
 import { getAppDef } from "./registry";
+import { defaultWisp } from "./engine/scramjet";
 
 const MENUBAR_H = 30;
 const DOCK_RESERVED = 96;
@@ -66,6 +70,9 @@ interface OsStore {
   notifications: OsNotification[];
   downloads: DownloadItem[];
   trashCount: number;
+  browser: BrowserSettings;
+  safariHistory: HistoryEntry[];
+  bookmarks: Bookmark[];
 
   setStage: (s: Stage) => void;
   finishBoot: () => void;
@@ -86,6 +93,14 @@ interface OsStore {
 
   updateSettings: (patch: Partial<OsSettings>) => void;
   setSys: (patch: Partial<SysState>) => void;
+
+  updateBrowser: (patch: Partial<BrowserSettings>) => void;
+  addHistory: (url: string, title: string) => void;
+  removeHistory: (id: string) => void;
+  clearHistory: () => void;
+  addBookmark: (b: Omit<Bookmark, "id">) => string;
+  removeBookmark: (id: string) => void;
+  updateBookmark: (id: string, patch: Partial<Bookmark>) => void;
 
   upsertNote: (note: Partial<Note> & { id?: string }) => string;
   deleteNote: (id: string) => void;
@@ -185,6 +200,19 @@ export const useOS = create<OsStore>()(
       notifications: [],
       downloads: [],
       trashCount: 3,
+      browser: {
+        wispUrl: "",
+        searchEngine: "bing",
+        searxngUrl: "",
+        keepHistory: true,
+      },
+      safariHistory: [],
+      bookmarks: [
+        { id: "bm-axcgames", url: "https://axcgamestudios.github.io/nueva-pestana/", name: "AXCGAMES", folder: "Favoritos" },
+        { id: "bm-youtube", url: "https://www.youtube.com", name: "YouTube", folder: "Favoritos" },
+        { id: "bm-wikipedia", url: "https://es.wikipedia.org", name: "Wikipedia", folder: "Favoritos" },
+        { id: "bm-ddg", url: "https://duckduckgo.com", name: "DuckDuckGo", folder: "Favoritos" },
+      ],
 
       setStage: (s) => set({ stage: s }),
       finishBoot: () => set({ booted: true, stage: "login" }),
@@ -356,6 +384,41 @@ export const useOS = create<OsStore>()(
         set({ sys: { ...get().sys, ...patch } });
       },
 
+      updateBrowser: (patch) => {
+        set({ browser: { ...get().browser, ...patch } });
+      },
+
+      addHistory: (url, title) => {
+        if (!get().browser.keepHistory || !/^https?:/i.test(url)) return;
+        const prev = get().safariHistory;
+        // deduplicar consecutivas con la misma URL (navegación SPA)
+        if (prev[0] && prev[0].url === url) {
+          set({ safariHistory: [{ ...prev[0], title: title || prev[0].title, time: Date.now() }] });
+          return;
+        }
+        set({ safariHistory: [{ id: uid("h"), url, title, time: Date.now() }, ...prev].slice(0, 500) });
+      },
+
+      removeHistory: (id) => {
+        set({ safariHistory: get().safariHistory.filter((h) => h.id !== id) });
+      },
+
+      clearHistory: () => set({ safariHistory: [] }),
+
+      addBookmark: (b) => {
+        const id = uid("bm");
+        set({ bookmarks: [...get().bookmarks, { ...b, id }] });
+        return id;
+      },
+
+      removeBookmark: (id) => {
+        set({ bookmarks: get().bookmarks.filter((b) => b.id !== id) });
+      },
+
+      updateBookmark: (id, patch) => {
+        set({ bookmarks: get().bookmarks.map((b) => (b.id === id ? { ...b, ...patch } : b)) });
+      },
+
       upsertNote: (note) => {
         const id = note.id ?? uid("n");
         const state = get();
@@ -446,7 +509,26 @@ export const useOS = create<OsStore>()(
         notes: s.notes,
         downloads: s.downloads,
         trashCount: s.trashCount,
+        browser: s.browser,
+        safariHistory: s.safariHistory,
+        bookmarks: s.bookmarks,
       }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<OsStore>;
+        return {
+          ...current,
+          ...p,
+          browser: {
+            ...current.browser,
+            ...(p.browser ?? {}),
+            // wispUrl vacío = usar el valor por defecto inteligente en runtime
+            wispUrl: p.browser?.wispUrl || defaultWisp(),
+            // migración: el valor antiguo "ddg" pasa a "bing"
+            searchEngine: p.browser?.searchEngine === "searxng" ? "searxng" : "bing",
+          },
+          settings: { ...current.settings, ...(p.settings ?? {}) },
+        };
+      },
     }
   )
 );

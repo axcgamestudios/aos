@@ -26,6 +26,7 @@ function ClockBig() {
 
 export function LoginScreen({ mode }: { mode: "login" | "lock" }) {
   const userName = useOS((s) => s.settings.userName);
+  const avatar = useOS((s) => s.settings.avatar);
   const login = useOS((s) => s.login);
   const setStage = useOS((s) => s.setStage);
   const [pw, setPw] = useState("");
@@ -81,7 +82,11 @@ export function LoginScreen({ mode }: { mode: "login" | "lock" }) {
       <div className="relative flex h-full flex-col items-center">
         {/* bloque de autenticación, en el tercio inferior como macOS */}
         <div className="absolute top-[58%] flex flex-col items-center">
-          <AvatarIcon className="h-[96px] w-[96px] rounded-full shadow-[0_10px_38px_rgba(0,0,0,0.45)] ring-[3px] ring-white/35" />
+          {avatar ? (
+            <img src={avatar} alt="" className="h-[96px] w-[96px] rounded-full object-cover shadow-[0_10px_38px_rgba(0,0,0,0.45)] ring-[3px] ring-white/35" />
+          ) : (
+            <AvatarIcon className="h-[96px] w-[96px] rounded-full shadow-[0_10px_38px_rgba(0,0,0,0.45)] ring-[3px] ring-white/35" />
+          )}
           <h1 className="mt-3 text-[15px] font-semibold text-white [text-shadow:0_1px_14px_rgba(0,0,0,0.5)]">
             {userName}
           </h1>

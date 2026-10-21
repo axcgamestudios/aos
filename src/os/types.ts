@@ -106,6 +106,35 @@ export interface OsSettings {
   dockMagnify: boolean;
   reduceTransparency: boolean;
   userName: string;
+  /** avatar del usuario como dataURL (imagen subida, opcional) */
+  avatar?: string;
+  /** fondo personalizado como dataURL (imagen subida, opcional) */
+  customWallpaper?: string;
+  customWallpaperName?: string;
+}
+
+export interface BrowserSettings {
+  /** URL del servidor wisp (transporte del motor Scramjet) */
+  wispUrl: string;
+  /** motor de búsqueda: Bing (RSS público) o instancia SearXNG propia */
+  searchEngine: "bing" | "searxng";
+  searxngUrl: string;
+  /** guardar historial de navegación */
+  keepHistory: boolean;
+}
+
+export interface HistoryEntry {
+  id: string;
+  url: string;
+  title: string;
+  time: number;
+}
+
+export interface Bookmark {
+  id: string;
+  url: string;
+  name: string;
+  folder?: string;
 }
 
 export type WindowOpenOptions = {

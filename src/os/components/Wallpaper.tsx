@@ -5,7 +5,8 @@ import { useOS } from "../store";
 import { getWallpaper } from "../wallpapers";
 
 export default function Wallpaper() {
-  const wallpaper = useOS((s) => getWallpaper(s.settings.wallpaper));
+  const settings = useOS((s) => s.settings);
+  const wallpaper = getWallpaper(settings.wallpaper, settings.customWallpaper);
   return (
     <motion.div
       initial={{ scale: 1.06 }}

@@ -66,7 +66,17 @@ export const WALLPAPERS: Wallpaper[] = [
 
 export const DEFAULT_WALLPAPER = "goldengate";
 
-export function getWallpaper(id: string): Wallpaper {
+export const CUSTOM_WALLPAPER_ID = "custom";
+
+export function getWallpaper(id: string, customDataUrl?: string): Wallpaper {
+  if (id === CUSTOM_WALLPAPER_ID && customDataUrl) {
+    return {
+      id: CUSTOM_WALLPAPER_ID,
+      name: "Personalizado",
+      css: `url('${customDataUrl}') center/cover no-repeat`,
+      dark: true,
+    };
+  }
   return WALLPAPERS.find((w) => w.id === id) ?? WALLPAPERS[0];
 }
 
