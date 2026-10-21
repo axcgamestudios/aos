@@ -32,6 +32,7 @@ import {
   onEngineDownload,
   recoverEngine,
   streamToBlob,
+  testWisp,
   type EngineDiagnostics,
   type ScramjetControllerApi,
   type ScramjetFrameApi,
@@ -61,6 +62,7 @@ interface Tab {
   history: string[]; // historial de la pestaña (URLs/acciones)
   hIndex: number; // posición actual en el historial
   rNonce?: number; // contador para forzar recarga de vistas nativas (YouTube)
+  error?: string; // error visible de carga (p. ej. motor sin respuesta), con reintento
 }
 
 interface SearchResult {
@@ -144,6 +146,8 @@ export default function SafariApp({ win }: AppProps) {
   const ctrlRef = useRef<ScramjetControllerApi | null>(null);
   const framesRef = useRef<Map<string, ScramjetFrameApi>>(new Map());
   const iframeRefs = useRef<Map<string, HTMLIFrameElement>>(new Map());
+  // ventana temporal de carga por pestaña para el watchdog (stage 0 = primera espera, 1 = tras reintento)
+  const hangRef = useRef<Map<string, { start: number; stage: number }>>(new Map());
   const tabsRef = useRef(tabs);
   const activeRef = useRef(activeTab);
   tabsRef.current = tabs;
@@ -340,18 +344,91 @@ export default function SafariApp({ win }: AppProps) {
     (frame: ScramjetFrameApi, id: string) => {
       frame.addEventListener("urlchange", (e) => {
         const u = (e as unknown as { url: string }).url;
-        patchTab(id, { url: u, favicon: faviconFor(u) });
+        hangRef.current.delete(id); // el motor entregó página: los datos fluyen
+        patchTab(id, { url: u, favicon: faviconFor(u), error: undefined });
         addHistory(u, hostOf(u));
         // mantener la entrada actual del historial de pestaña sincronizada (SPAs)
         setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, history: t.history.map((h, i) => (i === t.hIndex ? u : h)) } : t)));
         readPageMetaSoon(id);
       });
       frame.addEventListener("navigate", () => {
-        patchTab(id, { loading: true });
+        hangRef.current.set(id, { start: Date.now(), stage: 0 }); // ventana nueva para el watchdog
+        patchTab(id, { loading: true, error: undefined });
       });
     },
     [addHistory, patchTab, readPageMetaSoon]
   );
+
+  /* reintenta la navegación con un frame NUEVO del motor (tras una caída: el
+     frame viejo puede quedar enganchado a un SharedWorker/ws muerto) */
+  const retryFreshFrame = useCallback(
+    async (id: string, url: string): Promise<boolean> => {
+      framesRef.current.delete(id);
+      try {
+        const ctrl = await ensureEngine(browser.wispUrl);
+        ctrlRef.current = ctrl;
+        const iframe = iframeRefs.current.get(id) ?? (await waitForIframe(id));
+        if (!iframe) return false;
+        const fresh = ctrl.createFrame(iframe);
+        framesRef.current.set(id, fresh);
+        wireFrameEvents(fresh, id);
+        fresh.go(url);
+        hangRef.current.set(id, { start: Date.now(), stage: 1 }); // ya con un reintento encima
+        return true;
+      } catch (e) {
+        console.error("[safari] reintento con frame nuevo:", e);
+        return false;
+      }
+    },
+    [browser.wispUrl, waitForIframe, wireFrameEvents]
+  );
+
+  /* pestaña colgada >22 s: ¿motor medio muerto (WS abierto pero sin datos)
+     o simplemente sitio lento? La prueba honesta lo distingue y solo si el
+     motor NO fluye se recupera y reintenta con frame nuevo. */
+  const handleHungTab = useCallback(
+    async (t: Tab) => {
+      const activeWisp = getDiagnostics().wispUrl || browser.wispUrl;
+      const probe = await testWisp(activeWisp, 9000);
+      if (probe.ok) return; // el motor fluye: el sitio va lento, se le da margen
+      notify("safari", "Motor sin flujo", "Recuperando el motor y reintentando la página…");
+      try {
+        await recoverEngine("carga colgada");
+        await retryFreshFrame(t.id, t.url);
+      } catch (e) {
+        console.error("[safari] recuperación tras cuelgue:", e);
+      }
+    },
+    [browser.wispUrl, notify, retryFreshFrame]
+  );
+
+  /* watchdog de carga: ninguna pestaña puede quedarse "cargando" para siempre
+     (el motor dormido abre el WS pero no hace fluir datos → spinner eterno).
+     A los 22 s se diagnostica y reintenta; si 22 s después sigue igual, se
+     declara el error de forma honesta con botón de reintento. */
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const now = Date.now();
+      for (const t of tabsRef.current) {
+        if (!t.loading) {
+          hangRef.current.delete(t.id);
+          continue;
+        }
+        const h = hangRef.current.get(t.id);
+        if (!h) continue; // sin ventana temporal (p. ej. motor aún inicializando)
+        if (h.stage === 0 && now - h.start > 22000) {
+          h.start = now;
+          h.stage = 1;
+          void handleHungTab(t);
+        } else if (h.stage >= 1 && now - h.start > 22000) {
+          hangRef.current.delete(t.id);
+          patchTab(t.id, { loading: false, error: `El motor no respondió al intentar cargar ${hostOf(t.url)}.` });
+          notify("safari", "Página sin respuesta", `${hostOf(t.url)} no cargó. Reintenta o revisa el motor en Ajustes.`);
+        }
+      }
+    }, 2500);
+    return () => clearInterval(iv);
+  }, [handleHungTab, notify, patchTab]);
 
   const navigateTab = useCallback(
     async (id: string, rawUrl: string, opts?: { push?: boolean }) => {
@@ -387,7 +464,7 @@ export default function SafariApp({ win }: AppProps) {
         return;
       }
 
-      patchTab(id, { url, title: hostOf(url), favicon: faviconFor(url), loading: true });
+      patchTab(id, { url, title: hostOf(url), favicon: faviconFor(url), loading: true, error: undefined });
       try {
         const ctrl = await ensureEngine(browser.wispUrl);
         ctrlRef.current = ctrl;
@@ -419,29 +496,20 @@ export default function SafariApp({ win }: AppProps) {
           wireFrameEvents(frame, id);
         }
         frame.go(url);
+        hangRef.current.set(id, { start: Date.now(), stage: 0 });
       } catch (e) {
         console.error("[safari] navegación:", e);
         // auto-recuperación + reintento con frame nuevo (el viejo puede estar roto)
         try {
           await recoverEngine("fallo de navegación");
-          const ctrl = await ensureEngine(browser.wispUrl);
-          ctrlRef.current = ctrl;
-          framesRef.current.delete(id);
-          const iframe = iframeRefs.current.get(id) ?? (await waitForIframe(id));
-          if (iframe) {
-            const fresh = ctrl.createFrame(iframe);
-            framesRef.current.set(id, fresh);
-            wireFrameEvents(fresh, id);
-            fresh.go(url);
-            return;
-          }
+          if (await retryFreshFrame(id, url)) return;
         } catch (e2) {
           console.error("[safari] recuperación:", e2);
         }
         patchTab(id, { loading: false, title: "Error del motor" });
       }
     },
-    [addHistory, browser.wispUrl, openInternalTab, patchTab, readPageMetaSoon, waitForIframe, wireFrameEvents]
+    [addHistory, browser.wispUrl, openInternalTab, patchTab, readPageMetaSoon, retryFreshFrame, waitForIframe, wireFrameEvents]
   );
 
   /* navegación inicial de la pestaña de arranque */
@@ -510,6 +578,7 @@ export default function SafariApp({ win }: AppProps) {
       if (!t) return;
       if (c === "stop") {
         try { iframeRefs.current.get(t.id)?.contentWindow?.stop(); } catch { /* ignore */ }
+        hangRef.current.delete(t.id);
         patchTab(t.id, { loading: false });
         return;
       }
@@ -533,7 +602,8 @@ export default function SafariApp({ win }: AppProps) {
         void navigateTab(t.id, t.url, { push: false });
         return;
       }
-      patchTab(t.id, { loading: true });
+      patchTab(t.id, { loading: true, error: undefined });
+      hangRef.current.set(t.id, { start: Date.now(), stage: 0 });
       try {
         frame.reload();
       } catch (e) {
@@ -770,21 +840,47 @@ export default function SafariApp({ win }: AppProps) {
                 onTitle={(title) => patchTab(t.id, { title })}
               />
             ) : (
-              <iframe
-                ref={(el) => {
-                  if (el) iframeRefs.current.set(t.id, el);
-                  else iframeRefs.current.delete(t.id);
-                }}
-                title={t.title}
-                src="about:blank"
-                className="h-full w-full border-0 bg-white"
-                allow="fullscreen; autoplay; encrypted-media; picture-in-picture; clipboard-write; gamepad"
-                onLoad={() => {
-                  patchTab(t.id, { loading: false });
-                  readPageMeta(t.id);
-                  attachClickCapture(t.id);
-                }}
-              />
+              <>
+                <iframe
+                  ref={(el) => {
+                    if (el) iframeRefs.current.set(t.id, el);
+                    else iframeRefs.current.delete(t.id);
+                  }}
+                  title={t.title}
+                  src="about:blank"
+                  className="h-full w-full border-0 bg-white"
+                  allow="fullscreen; autoplay; encrypted-media; picture-in-picture; clipboard-write; gamepad"
+                  onLoad={() => {
+                    hangRef.current.delete(t.id); // la página cargó: reinicio del watchdog
+                    patchTab(t.id, { loading: false, error: undefined });
+                    readPageMeta(t.id);
+                    attachClickCapture(t.id);
+                  }}
+                />
+                {t.error && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-white/95 p-6 text-center backdrop-blur-sm dark:bg-neutral-900/95">
+                    <XCircle size={38} className="shrink-0 text-red-500" />
+                    <div className="max-w-md space-y-1">
+                      <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">La página no cargó</p>
+                      <p className="text-xs leading-relaxed text-neutral-600 dark:text-neutral-400">{t.error}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => navigateTab(t.id, t.url, { push: false })}
+                        className="rounded-lg bg-[var(--accent-os)] px-3.5 py-1.5 text-xs font-medium text-white shadow transition hover:opacity-90"
+                      >
+                        Reintentar
+                      </button>
+                      <button
+                        onClick={() => openApp("settings", { payload: { section: "browser" } })}
+                        className="rounded-lg bg-black/5 px-3.5 py-1.5 text-xs font-medium text-neutral-700 shadow transition hover:bg-black/10 dark:bg-white/10 dark:text-neutral-200 dark:hover:bg-white/20"
+                      >
+                        Ajustes del navegador
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         ))}

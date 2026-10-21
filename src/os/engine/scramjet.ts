@@ -142,8 +142,22 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-/** Prueba rápida de un servidor wisp: abre un WebSocket y espera a que esté listo. */
-export function testWisp(url: string, timeoutMs = 6000): Promise<{ ok: boolean; detail: string }> {
+/* ---------- prueba REAL de salud de un wisp ----------
+   QUE NO ENGAÑE: un motor dormido (Render se apaga tras ~15 min sin tráfico)
+   ACEPTA el WebSocket y hasta envía el CONTINUE inicial, pero jamás hace
+   fluir datos → las páginas quedarían cargando para siempre y ningún error
+   dispararía la auto-reparación. Por eso la prueba abre un mini-túnel wisp
+   de verdad (CONNECT a example.com:80 + GET mínimo) y exige el primer byte
+   de datos de vuelta. Solo sana si los datos fluyen. */
+function wispFrame(type: number, streamId: number, payload: Uint8Array): Uint8Array {
+  const f = new Uint8Array(5 + payload.length);
+  f[0] = type;
+  new DataView(f.buffer).setUint32(1, streamId, true);
+  f.set(payload, 5);
+  return f;
+}
+
+export function testWisp(url: string, timeoutMs = 9000): Promise<{ ok: boolean; detail: string }> {
   return new Promise((resolve) => {
     if (!/^wss?:\/\//i.test(url)) return resolve({ ok: false, detail: "La URL debe empezar por ws:// o wss://" });
     let settled = false;
@@ -153,16 +167,48 @@ export function testWisp(url: string, timeoutMs = 6000): Promise<{ ok: boolean; 
     } catch (e) {
       return resolve({ ok: false, detail: `URL inválida: ${String(e)}` });
     }
+    ws.binaryType = "arraybuffer";
     const done = (ok: boolean, detail: string) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       try { ws.close(); } catch { /* ignore */ }
       resolve({ ok, detail });
     };
-    const timer = setTimeout(() => done(false, "Tiempo de espera agotado (el servidor no respondió)"), timeoutMs);
+    const timer = setTimeout(
+      () => done(false, "El motor acepta conexiones pero no hizo fluir datos a tiempo (¿motor dormido o arrancando?)"),
+      timeoutMs,
+    );
     ws.onopen = () => {
-      clearTimeout(timer);
-      done(true, "Conexión WebSocket establecida con el transporte");
+      // túnel mínimo wisp v1: CONNECT(example.com:80, TCP) + GET con cierre
+      const host = "example.com";
+      const hb = new TextEncoder().encode(host);
+      const conn = new Uint8Array(3 + hb.length);
+      conn[0] = 0x01; // TCP
+      new DataView(conn.buffer).setUint16(1, 80, true);
+      conn.set(hb, 3);
+      ws.send(wispFrame(0x01, 1, conn)); // CONNECT
+      ws.send(
+        wispFrame(
+          0x02,
+          1,
+          new TextEncoder().encode(`GET / HTTP/1.1\r\nHost: ${host}\r\nUser-Agent: axcsos-health\r\nConnection: close\r\n\r\n`),
+        ),
+      ); // DATA
+    };
+    ws.onmessage = (ev) => {
+      if (settled || !(ev.data instanceof ArrayBuffer)) return;
+      const b = new Uint8Array(ev.data);
+      if (b.length < 5) return;
+      const type = b[0];
+      if (type === 0x02) {
+        // DATA del túnel: los datos fluyen de verdad
+        done(true, "Túnel verificado: el motor hace fluir datos reales");
+      } else if (type === 0x04) {
+        // CLOSE del servidor: el motor rechazó el CONNECT de prueba
+        done(false, "El motor rechazó la conexión de prueba al túnel");
+      }
+      // CONTINUE(0x03) / INFO(0x05): indiferente, seguir esperando datos
     };
     ws.onerror = () => {
       clearTimeout(timer);
@@ -170,7 +216,7 @@ export function testWisp(url: string, timeoutMs = 6000): Promise<{ ok: boolean; 
     };
     ws.onclose = () => {
       clearTimeout(timer);
-      if (!settled) done(false, "El servidor cerró la conexión inmediatamente");
+      if (!settled) done(false, "El servidor cerró la conexión sin responder");
     };
   });
 }
@@ -251,12 +297,23 @@ async function doInit(wispUrl: string): Promise<ScramjetControllerApi> {
       }
     });
 
+    // ANTES de fijar el transporte se comprueba la cadena con la prueba
+    // honesta (datos reales): si el motor propio está dormido/medio muerto
+    // (arranque en frío de Render), se aplica el respaldo sano de verdad
+    // en vez de dejar la primera navegación colgada para siempre.
+    let healthy = wispUrl;
+    try {
+      healthy = await ensureHealthyWisp();
+    } catch {
+      /* sin prueba: se usa el solicitado tal cual, el watchdog de Safari actuará */
+    }
+
     const conn = new w.BareMux!.BareMuxConnection(`${b}/baremux/worker.js`);
     connection = conn;
-    await conn.setTransport(`${b}/libcurl/index.mjs`, [{ websocket: wispUrl }]);
-    currentWisp = wispUrl;
-    lastWispUrl = wispUrl;
-    updateDiag({ transportSet: true, status: "ready", wispUrl });
+    await conn.setTransport(`${b}/libcurl/index.mjs`, [{ websocket: healthy }]);
+    currentWisp = healthy;
+    lastWispUrl = healthy;
+    updateDiag({ transportSet: true, status: "ready", wispUrl: healthy });
 
     // proxy global de descargas: lo conecta Safari con la app Descargas
     ctrl.addEventListener("download", (e) => {
@@ -317,7 +374,9 @@ export async function ensureHealthyWisp(): Promise<string> {
     seen.add(wisp);
     // El motor propio puede estar frío (Render se duerme sin tráfico): margen
     // amplio para el primer arranque; el resto de la cadena se prueba rápido.
-    const r = await testWisp(wisp, wisp === MAIN_WISP ? 25000 : 6000);
+    // La prueba es a nivel de DATOS: un WS que abre pero no fluye datos es un
+    // motor medio muerto que colgaría las páginas para siempre.
+    const r = await testWisp(wisp, wisp === MAIN_WISP ? 22000 : 8000);
     if (r.ok) {
       if (wisp !== cur) await setTransportFresh(wisp);
       updateDiag({ wispUrl: wisp, status: controller || diag.scriptsLoaded ? "ready" : "idle", transportSet: true, error: undefined });
@@ -329,9 +388,12 @@ export async function ensureHealthyWisp(): Promise<string> {
 
 /* ---------- keepalive del motor propio ----------
    El motor vive en Render (plan gratuito): sin tráfico, la instancia se
-   duerme y la primera navegación tarda 30-60 s en despertar. Mantenemos un
-   WebSocket mínimo abierto durante toda la sesión del OS para que el motor
-   esté siempre caliente; si la conexión se corta, se reanuda sola. */
+   duerme y la primera navegación cuelga sin datos (arranque en frío).
+   Mantenemos un WebSocket abierto durante toda la sesión del OS y, además,
+   lo RENOVAMOS cada 4 minutos: cada nueva conexión ES una petición entrante
+   que resetea de verdad el temporizador de inactividad de Render (un WS
+   abierto pero en silencio puede no contarse como tráfico). Si la conexión
+   se corta antes, se reanuda sola a los 20 s. */
 let keepaliveStarted = false;
 let keepaliveWs: WebSocket | null = null;
 let keepaliveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -340,6 +402,7 @@ export function startWispKeepalive(): void {
   if (keepaliveStarted || typeof window === "undefined") return;
   keepaliveStarted = true;
   const tick = (delay: number) => {
+    if (keepaliveTimer) clearTimeout(keepaliveTimer);
     keepaliveTimer = setTimeout(() => {
       try {
         keepaliveWs?.close();
@@ -352,9 +415,11 @@ export function startWispKeepalive(): void {
         ws.onopen = () => {
           // señal de depuración/E2E: el motor propio está caliente
           (window as unknown as { __wispKeepalive?: boolean }).__wispKeepalive = true;
+          // renovación proactiva: dentro de 4 min, cerrar y reabrir
+          tick(240000);
         };
         ws.onclose = () => {
-          if (ws === keepaliveWs) tick(20000); // reconexión periódica
+          if (ws === keepaliveWs) tick(20000); // reconexión tras corte
         };
         ws.onerror = () => {
           /* onclose llegará después */
