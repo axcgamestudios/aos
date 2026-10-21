@@ -22,6 +22,7 @@ import SettingsApp from "./apps/Settings";
 import TextEditApp from "./apps/TextEdit";
 import PreviewApp from "./apps/Preview";
 import AboutApp from "./apps/AboutMac";
+import DownloadsApp from "./apps/Downloads";
 
 const fileMenu: MenuDef = {
   title: "Archivo",
@@ -57,7 +58,7 @@ const windowMenu: MenuDef = {
 
 const helpMenu: MenuDef = {
   title: "Ayuda",
-  items: [{ label: "Ayuda de macOS Web", action: "openApp", actionArg: "notes" }],
+  items: [{ label: "Ayuda de axcsOS", action: "openApp", actionArg: "notes" }],
 };
 
 export const APPS: AppDef[] = [
@@ -171,6 +172,17 @@ export const APPS: AppDef[] = [
     menus: [fileMenu, editMenu, windowMenu, helpMenu],
   },
   {
+    id: "downloads",
+    name: "Descargas",
+    icon: ImageDocIcon,
+    component: DownloadsApp,
+    defaultSize: { w: 560, h: 420 },
+    minSize: { w: 380, h: 300 },
+    showInDock: false,
+    showInLaunchpad: true,
+    menus: [fileMenu, editMenu, windowMenu, helpMenu],
+  },
+  {
     id: "textedit",
     name: "TextEdit",
     icon: DocIcon,
@@ -196,7 +208,7 @@ export const APPS: AppDef[] = [
   },
   {
     id: "about",
-    name: "Acerca de este Mac",
+    name: "Acerca de axcsOS",
     icon: FinderIcon,
     component: AboutApp,
     defaultSize: { w: 300, h: 430 },

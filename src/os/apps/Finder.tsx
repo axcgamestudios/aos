@@ -31,7 +31,7 @@ interface FsNode {
   size?: string;
 }
 
-const TXT_README = `macOS Web 27 "Liquid Glass"
+const TXT_README = `axcsOS 1.0 "Liquid Glass"
 =============================
 
 Este sistema operativo web incluye:
@@ -55,7 +55,7 @@ const TXT_APUNTES = `Apuntes — Historia de la informática
 1984  Macintosh original
 2001  Mac OS X 10.0 Cheetah
 2025  macOS 26 Tahoe (Liquid Glass)
-2026  macOS 27 — esta demo web 🍎`;
+2026  axcsOS 1.0 — esta demo web 🍐`;
 
 const ROOT: FsNode = {
   name: "Macintosh HD",

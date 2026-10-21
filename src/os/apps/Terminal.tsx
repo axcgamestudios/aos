@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AppProps } from "../types";
 import { useOS } from "../store";
 import { APPS } from "../registry";
-import { AppleLogo } from "../icons";
+import { PearLogo } from "../icons";
 
 interface Line {
   kind: "input" | "output";
@@ -33,7 +33,7 @@ const BANNER = `                    'c.
              oMMMMMMMMMMMMMM
                .loooooool.
 
-  usuario@macbook-web — macOS Web 27.0
+  usuario@axcs — axcsOS 1.0
   Chip Z1 Silicon · 16 GB · Liquid Glass`;
 
 export default function TerminalApp({ win }: AppProps) {
@@ -88,7 +88,7 @@ export default function TerminalApp({ win }: AppProps) {
         out("/Users/usuario");
         break;
       case "whoami":
-        out("usuario — Administrador de este MacBook Web");
+        out("usuario — Administrador de este equipo");
         break;
       case "fecha":
       case "date":
@@ -122,7 +122,7 @@ export default function TerminalApp({ win }: AppProps) {
         setLines([]);
         return;
       case "sudo":
-        out("El usuario no está en el fichero sudoers. Se informará de este incidente. 🍎");
+        out("El usuario no está en el fichero sudoers. Se informará de este incidente. 🍐");
         break;
       case "salir":
       case "exit":
@@ -159,7 +159,7 @@ export default function TerminalApp({ win }: AppProps) {
         ))}
         {/* live input line */}
         <div className="flex items-center gap-1.5 text-[12px]">
-          <AppleLogo className="h-3 w-3 text-neutral-400" />
+          <PearLogo className="h-3.5 w-2 text-neutral-400" />
           <span className="text-[#5df58a]">usuario@macbook-web</span>
           <span className="text-neutral-400">~ %</span>
           <input

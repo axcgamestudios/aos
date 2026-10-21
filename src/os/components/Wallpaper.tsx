@@ -12,13 +12,7 @@ export default function Wallpaper() {
       animate={{ scale: 1 }}
       transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
       className="fixed inset-0 z-0"
-      style={{
-        backgroundImage: wallpaper.css,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-        backgroundColor: wallpaper.dark ? "#0f1030" : "#eaf7f4",
-      }}
+      style={{ background: wallpaper.css }}
       aria-hidden
     />
   );

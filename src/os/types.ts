@@ -89,6 +89,15 @@ export interface OsNotification {
   time: number;
 }
 
+export interface DownloadItem {
+  id: string;
+  name: string;
+  url: string;
+  size: number;
+  mime: string;
+  date: number;
+}
+
 export interface OsSettings {
   wallpaper: string;
   appearance: Appearance;

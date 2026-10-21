@@ -41,7 +41,7 @@ const ITEMS: DesktopItem[] = [
         payload: {
           fileName: "LÉEME.txt",
           content:
-            "Bienvenido a macOS Web 27 “Liquid Glass”.\n\nPara empezar:\n• AXCGAMES está en el Dock — 21+ juegos gratis\n• ⌘Espacio abre Spotlight\n• Clic derecho en el escritorio para más opciones\n• Ajustes del Sistema para cambiar el fondo\n\nDisfruta del sistema. 🍎",
+            "Bienvenido a axcsOS 1.0 “Liquid Glass”.\n\nPara empezar:\n• AXCGAMES está en el Dock — 21+ juegos gratis\n• ⌘Espacio abre Spotlight\n• Clic derecho en el escritorio para más opciones\n• Ajustes del Sistema para cambiar el fondo\n\nDisfruta del sistema. 🍐",
         },
       }),
   },
@@ -95,7 +95,7 @@ export default function Desktop() {
           >
             {[
               { label: "Nueva carpeta", action: () => notify("finder", "Nueva carpeta", "Las carpetas del escritorio no se guardan en la demo.") },
-              { label: "Obtener información", action: () => notify("finder", "Información", "macOS Web 27.0 · Z1 Silicon · 16 GB") },
+              { label: "Obtener información", action: () => notify("finder", "Información", "axcsOS 1.0 · Z1 Silicon · 16 GB") },
               { sep: true },
               { label: "Cambiar fondo de escritorio…", action: () => openApp("settings") },
               { label: "Ajustes del Dock…", action: () => openApp("settings") },

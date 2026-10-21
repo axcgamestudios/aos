@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
+  DownloadItem,
   Note,
   OsNotification,
   OsSettings,
@@ -20,9 +21,9 @@ const DOCK_RESERVED = 96;
 const SEED_NOTES: Note[] = [
   {
     id: "note-welcome",
-    title: "Bienvenido a macOS Web",
+    title: "Bienvenido a axcsOS",
     content:
-      "Bienvenido a macOS Web 27 “Liquid Glass”.\n\nCosas que puedes probar:\n• ⌘ + Espacio abre Spotlight\n• ⌘ + Tab cambia de aplicación\n• Haz clic derecho en el escritorio\n• Abre la app AXCGAMES desde el Dock\n\nTodo se guarda automáticamente en este navegador.",
+      "Bienvenido a axcsOS 1.0 “Liquid Glass”.\n\nCosas que puedes probar:\n• ⌘ + Espacio abre Spotlight\n• ⌘ + Tab cambia de aplicación\n• Haz clic derecho en el escritorio\n• Abre la app AXCGAMES desde el Dock\n\nTodo se guarda automáticamente en este navegador.",
     updatedAt: Date.now(),
     folder: "Notas",
   },
@@ -63,6 +64,7 @@ interface OsStore {
   sys: SysState;
   notes: Note[];
   notifications: OsNotification[];
+  downloads: DownloadItem[];
   trashCount: number;
 
   setStage: (s: Stage) => void;
@@ -88,6 +90,10 @@ interface OsStore {
   upsertNote: (note: Partial<Note> & { id?: string }) => string;
   deleteNote: (id: string) => void;
 
+  addDownload: (d: Omit<DownloadItem, "id" | "date">) => string;
+  removeDownload: (id: string) => void;
+  clearDownloads: () => void;
+
   notify: (appId: string, title: string, body: string) => void;
   dismissNotification: (id: string) => void;
 
@@ -100,6 +106,41 @@ interface OsStore {
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+/* objectURLs de descargas (solo sesión actual, no persisten) */
+const downloadUrls = new Map<string, string>();
+export function setDownloadObjectUrl(id: string, url: string) {
+  downloadUrls.set(id, url);
+}
+export function getDownloadObjectUrl(id: string): string | undefined {
+  return downloadUrls.get(id);
+}
+
+/* migrar la clave antigua de persistencia a la nueva (y estrenar wallpaper Golden Gate) */
+if (typeof window !== "undefined") {
+  try {
+    if (!window.localStorage.getItem("axcsos")) {
+      const old = window.localStorage.getItem("macos-web-27");
+      if (old) {
+        const parsed = JSON.parse(old);
+        const oldState = parsed.state ?? {};
+        window.localStorage.setItem(
+          "axcsos",
+          JSON.stringify({
+            ...parsed,
+            state: {
+              ...oldState,
+              downloads: [],
+              settings: { ...(oldState.settings ?? {}), wallpaper: "goldengate" },
+            },
+          })
+        );
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 let uidCounter = 0;
 const uid = (prefix = "w") =>
@@ -142,6 +183,7 @@ export const useOS = create<OsStore>()(
       },
       notes: SEED_NOTES,
       notifications: [],
+      downloads: [],
       trashCount: 3,
 
       setStage: (s) => set({ stage: s }),
@@ -149,7 +191,7 @@ export const useOS = create<OsStore>()(
       login: () => {
         set({ stage: "desktop" });
         setTimeout(() => {
-          get().notify("finder", "Bienvenido", "Sesión iniciada. Disfruta de macOS Web 27.");
+          get().notify("finder", "Bienvenido", "Sesión iniciada. Disfruta de axcsOS.");
         }, 900);
       },
       logout: () =>
@@ -346,6 +388,25 @@ export const useOS = create<OsStore>()(
         set({ notes: get().notes.filter((n) => n.id !== id) });
       },
 
+      addDownload: (d) => {
+        const id = uid("dl");
+        set({ downloads: [{ ...d, id, date: Date.now() }, ...get().downloads] });
+        return id;
+      },
+      removeDownload: (id) => {
+        const obj = downloadUrls.get(id);
+        if (obj) {
+          URL.revokeObjectURL(obj);
+          downloadUrls.delete(id);
+        }
+        set({ downloads: get().downloads.filter((d) => d.id !== id) });
+      },
+      clearDownloads: () => {
+        for (const obj of downloadUrls.values()) URL.revokeObjectURL(obj);
+        downloadUrls.clear();
+        set({ downloads: [] });
+      },
+
       notify: (appId, title, body) => {
         if (get().sys.dnd) return;
         const n: OsNotification = { id: uid("nt"), appId, title, body, time: Date.now() };
@@ -378,11 +439,12 @@ export const useOS = create<OsStore>()(
       closePopovers: () => closePopoversHelper(set),
     }),
     {
-      name: "macos-web-27",
+      name: "axcsos",
       partialize: (s) => ({
         settings: s.settings,
         sys: s.sys,
         notes: s.notes,
+        downloads: s.downloads,
         trashCount: s.trashCount,
       }),
     }

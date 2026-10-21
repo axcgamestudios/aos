@@ -5,7 +5,7 @@ import { Check, Info, Monitor, Palette, Sun, Moon } from "lucide-react";
 import type { AppProps } from "../types";
 import { useOS } from "../store";
 import { ACCENTS, WALLPAPERS } from "../wallpapers";
-import { AppleLogo } from "../icons";
+import { PearLogo } from "../icons";
 type Pane = "appearance" | "wallpaper" | "dock" | "general";
 
 const PANES: { id: Pane; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
@@ -196,9 +196,9 @@ export default function SettingsApp(_props: AppProps) {
             <Card title="Acerca de">
               <Row>
                 <div className="flex items-center gap-4">
-                  <AppleLogo className="h-8 w-8 text-neutral-700 dark:text-neutral-200" />
+                  <PearLogo className="h-9 w-5 text-neutral-700 dark:text-neutral-200" />
                   <div>
-                    <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">macOS Web 27.0</p>
+                    <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">axcsOS 1.0</p>
                     <p className="text-[11px] text-neutral-400">Compilación 27A1241 · Liquid Glass</p>
                   </div>
                 </div>

@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { BatteryFull, Search, Wifi, WifiOff } from "lucide-react";
 import { useActiveAppId, useOS } from "../store";
 import { getAppDef } from "../registry";
-import { AppleLogo } from "../icons";
+import { PearLogo } from "../icons";
 import type { MenuItem } from "../types";
 
 function MenuDropdown({
@@ -147,7 +147,7 @@ export default function MenuBar() {
   };
 
   const appleItems: MenuItem[] = [
-    { label: "Acerca de este Mac", action: "about" },
+    { label: "Acerca de axcsOS", action: "about" },
     { separator: true },
     { label: "Ajustes del Sistema…", action: "settings" },
     { label: "App Store…", action: "openApp", actionArg: "notes" },
@@ -189,7 +189,7 @@ export default function MenuBar() {
     >
       {/* Apple menu */}
       <MenuButton id="apple" open={open} onOpen={setOpen} onHover={hoverKey} items={menuFor("apple")} onAction={runAction}>
-        <AppleLogo className="h-[15px] w-[13px]" />
+        <PearLogo className="h-[16px] w-[9px]" />
       </MenuButton>
 
       {/* App name menu */}

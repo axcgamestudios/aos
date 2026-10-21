@@ -9,6 +9,12 @@ export interface Wallpaper {
 
 export const WALLPAPERS: Wallpaper[] = [
   {
+    id: "goldengate",
+    name: "Golden Gate",
+    css: "url('/wallpapers/goldengate.png') center/cover no-repeat",
+    dark: true,
+  },
+  {
     id: "tahoe-dark",
     name: "Tahoe (Oscuro)",
     css: "url('/wallpapers/tahoe-dark.png') center/cover no-repeat",
@@ -58,7 +64,7 @@ export const WALLPAPERS: Wallpaper[] = [
   },
 ];
 
-export const DEFAULT_WALLPAPER = "tahoe-dark";
+export const DEFAULT_WALLPAPER = "goldengate";
 
 export function getWallpaper(id: string): Wallpaper {
   return WALLPAPERS.find((w) => w.id === id) ?? WALLPAPERS[0];

@@ -77,7 +77,7 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 
-  /* ===== macOS Web OS tokens ===== */
+  /* ===== axcsOS OS tokens ===== */
   --accent-os: #0a84ff;
   --menubar-h: 28px;
   --ease-mac: cubic-bezier(0.32, 0.72, 0, 1);
