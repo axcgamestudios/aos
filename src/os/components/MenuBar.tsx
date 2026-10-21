@@ -153,7 +153,7 @@ export default function MenuBar() {
     { label: "App Store…", action: "openApp", actionArg: "notes" },
     { separator: true },
     { label: "Bloquear pantalla", shortcut: "⌃⌘Q", action: "lock" },
-    { label: `Cerrar sesión de «${os.settings.userName}»…`, shortcut: "⇧⌘Q", action: "logout" },
+    { label: `Cerrar sesión de «${os.session?.username ?? os.settings.userName}»…`, shortcut: "⇧⌘Q", action: "logout" },
     { separator: true },
     { label: "Apagar…", action: "logout" },
     { label: "Reiniciar…", action: "logout" },

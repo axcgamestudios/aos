@@ -14,6 +14,7 @@ import { NotificationCenter, NotificationToasts } from "@/os/components/Notifica
 import AppSwitcher from "@/os/components/AppSwitcher";
 import BootScreen from "@/os/components/BootScreen";
 import { LoginGate } from "@/os/components/LoginScreen";
+import AdminPanel from "@/os/components/AdminPanel";
 
 export default function Page() {
   const stage = useOS((s) => s.stage);
@@ -126,6 +127,7 @@ export default function Page() {
 
       <LoginGate />
       {stage === "boot" && <BootScreen />}
+      <AdminPanel />
 
       {/* brightness dimmer */}
       <div

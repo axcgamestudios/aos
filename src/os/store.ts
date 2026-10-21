@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { stopSessionGuard } from "./services/auth";
 import type {
   Bookmark,
   BrowserSettings,
@@ -54,6 +55,8 @@ export interface SysState {
 interface OsStore {
   stage: Stage;
   booted: boolean;
+  session: { accountId: string; username: string } | null;
+  kickMessage: string;
   windows: WindowState[];
   zTop: number;
   activeId: string | null;
@@ -76,8 +79,10 @@ interface OsStore {
 
   setStage: (s: Stage) => void;
   finishBoot: () => void;
-  login: () => void;
+  login: (account?: { id: string; username: string }) => void;
   logout: () => void;
+  logoutFromKick: (message: string) => void;
+  setKickMessage: (m: string) => void;
   lock: () => void;
 
   openApp: (appId: string, opts?: WindowOpenOptions) => string | null;
@@ -168,6 +173,8 @@ export const useOS = create<OsStore>()(
     (set, get) => ({
       stage: "boot",
       booted: false,
+      session: null,
+      kickMessage: "",
       windows: [],
       zTop: 10,
       activeId: null,
@@ -218,24 +225,47 @@ export const useOS = create<OsStore>()(
 
       setStage: (s) => set({ stage: s }),
       finishBoot: () => set({ booted: true, stage: "login" }),
-      login: () => {
-        set({ stage: "desktop" });
+      login: (account) => {
+        set({
+          stage: "desktop",
+          kickMessage: "",
+          ...(account ? { session: { accountId: account.id, username: account.username }, settings: { ...get().settings, userName: account.username } } : {}),
+        });
         // mantiene el motor de navegación propio (Render) caliente durante la sesión
         startWispKeepalive();
+        const who = account?.username ?? get().settings.userName;
         setTimeout(() => {
-          get().notify("finder", "Bienvenido", "Sesión iniciada. Disfruta de axcsOS.");
+          get().notify("finder", `Hola, ${who}`, "Sesión iniciada en axcsOS.");
         }, 900);
       },
-      logout: () =>
+      logout: () => {
+        stopSessionGuard(); // 1 dispositivo por cuenta: esta sesión deja de afirmarse
         set({
           stage: "login",
+          session: null,
           windows: [],
           activeId: null,
           spotlightOpen: false,
           launchpadOpen: false,
           controlCenterOpen: false,
           notifCenterOpen: false,
-        }),
+        });
+      },
+      logoutFromKick: (message) => {
+        stopSessionGuard();
+        set({
+          stage: "login",
+          session: null,
+          kickMessage: message,
+          windows: [],
+          activeId: null,
+          spotlightOpen: false,
+          launchpadOpen: false,
+          controlCenterOpen: false,
+          notifCenterOpen: false,
+        });
+      },
+      setKickMessage: (m) => set({ kickMessage: m }),
       lock: () => set({ stage: "lock" }),
 
       openApp: (appId, opts) => {
