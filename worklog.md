@@ -1,6 +1,27 @@
 # Worklog
 
 ---
+Task ID: 5
+Agent: main (Z.ai)
+Task: Integrar el nuevo motor de navegación del estudio (wss://wsn-c6o3.onrender.com/) como transporte principal de Scramjet
+
+Work Log:
+- SONDEO DEL NUEVO MOTOR: wss://wsn-c6o3.onrender.com/ identificado como wisp-server-node (Rust/Node en Render free tier) mediante análisis de protocolo: (1) HTTP plano cuelga para siempre (solo acepta upgrades WS), (2) al abrir WS envía CONTINUE stream=0 buffer=127 — firma exacta de wisp-server-node (ConnectionHandler.js: ws.send(continuePacketMaker({streamID:0},127))), (3) framing wisp confirmado con el mapeo REAL del protocolo: 0x01=CONNECT, 0x02=DATA, 0x03=CONTINUE, 0x04=CLOSE, 0x05=INFO v2.
+- BUGS DE SONDA RESUELTOS: el probe original (probe-wisp.mjs) tenía DATA/CONTINUE intercambiados y esperaba un CONTINUE en stream 1 que wisp-server-node nunca envía (solo manda CONTINUE stream 0 inicial; flujo v1 puro sin handshake INFO). Sonda corregida (scripts/probe-wisp2.mjs): CONNECT + GET inmediatos → RESPUESTA HTTP/1.1 200 REAL de example.com a través del túnel en 264ms. MOTOR VERIFICADO AL 100%.
+- INTEGRACIÓN (src/os/engine/scramjet.ts): MAIN_WISP = wss://wsn-c6o3.onrender.com/ como transporte principal; defaultWisp() siempre devuelve MAIN_WISP; cadena de failover ensureHealthyWisp: [actual, MAIN_WISP (25s margen para despertar del dyno frío de Render), DEMO_WISP (6s), LOCAL_WISP (solo dev)] con dedupe; startWispKeepalive(): WebSocket persistente durante toda la sesión del OS que mantiene el dyno de Render despierto (Render free duerme sin tráfico → primera navegación tardaría 30-60s), con reconexión automática cada 20s y flag window.__wispKeepalive para E2E.
+- MIGRACIÓN DE STORE (src/os/store.ts): los usuarios con el demo viejo persistido en localStorage se migran automáticamente (wispUrl: defaultWisp() en merge); login() arranca el keepalive.
+- SAFARI (src/os/apps/Safari.tsx): el efecto de re-afirmación del transporte ahora comprueba salud ANTES de aplicar (testWisp 20s) para no pelear con el failover (si el motor propio está dormido/caído, se mantiene el respaldo activo en vez de romperse); StartPage con engineKind own/demo/other y textos honestos por estado.
+- AJUSTES (src/os/apps/Settings.tsx): banner verde "Conectado al motor propio del estudio (wisp-server-node en Render)" cuando está activo; el aviso ámbar del demo ahora explica que es un respaldo temporal y cómo volver al propio ("Reparar motor"). README actualizado.
+- E2E VERIFICADO (agent-browser, dev :3000): login → desktop → Safari con banner "Motor activo wss://wsn-c6o3.onrender.com/" → example.com CARGADO COMPLETO dentro del iframe (contenido multilingüe real, título de pestaña OK) → es.wikipedia.org cargado completo (Wikipedia:Portada con links/imágenes) → búsqueda Bing "telescopio james webb" con resultados reales → panel Ajustes → Navegador mostrando motor propio + banner verde → KEEPALIVE ON. (Nota: un reinicio de ventana durante el test fue HMR por editar el código en caliente, no un bug.)
+- DESPLIEGUE: commit main + export estático build:pages + rama gh-pages + verificación en vivo.
+
+Stage Summary:
+- El navegador de axcsOS ahora usa el motor PROPIO del estudio (Render) en vez del demo público ajeno: misma arquitectura Scramjet, transporte prioritario propio con respaldo automático y keepalive anti-sueño.
+- Compatibilidad garantizada: libcurl-transport 1.5.2 se conecta sin subprotocolo = flujo v1 puro, exactamente lo que wisp-server-node sirve (es el backend para el que se diseñó).
+- Evidencia: scripts/shots/wisp-e2e-*.png (login, desktop, banner motor, example.com, wikipedia, búsqueda, ajustes).
+- Sonda reutilizable: scripts/probe-wisp2.mjs (protocolo wisp correcto, modos v1/v2, cualquier host/puerto).
+
+---
 Task ID: 2
 Agent: main (Z.ai)
 Task: Restaurar axcsOS (Next.js) + logo pera + login fiel al ejemplo + Safari 100% nativo (fix 303, portadas YouTube, velocidad, streaming)

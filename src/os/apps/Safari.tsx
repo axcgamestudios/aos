@@ -27,6 +27,7 @@ import {
   ensureEngine,
   engineFetch,
   getDiagnostics,
+  MAIN_WISP,
   onDiagnostics,
   onEngineDownload,
   recoverEngine,
@@ -172,12 +173,22 @@ export default function SafariApp({ win }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* aplica cambio de wisp en caliente */
+  /* aplica cambio de wisp en caliente — solo si el destino está sano,
+     para no pelear con el failover automático (p. ej. motor propio dormido) */
   useEffect(() => {
     if (engineDiag.status === "ready" && browser.wispUrl && browser.wispUrl !== engineDiag.wispUrl) {
-      import("../engine/scramjet")
-        .then((m) => m.applyTransport(browser.wispUrl))
-        .catch((e) => console.error("[safari] cambio de wisp:", e));
+      let cancelled = false;
+      import("../engine/scramjet").then(async (m) => {
+        const r = await m.testWisp(browser.wispUrl, 20000);
+        if (!cancelled && r.ok) {
+          await m.applyTransport(browser.wispUrl);
+        } else if (!cancelled && !r.ok) {
+          console.warn("[safari] transporte configurado no sano, se mantiene el activo:", r.detail);
+        }
+      }).catch((e) => console.error("[safari] cambio de wisp:", e));
+      return () => {
+        cancelled = true;
+      };
     }
   }, [browser.wispUrl, engineDiag.status, engineDiag.wispUrl]);
 
@@ -733,7 +744,9 @@ export default function SafariApp({ win }: AppProps) {
                 history={safariHistory.slice(0, 8)}
                 engineReady={engineDiag.status === "ready"}
                 engineWisp={engineDiag.wispUrl || browser.wispUrl}
-                isDemoWisp={(engineDiag.wispUrl || browser.wispUrl) === DEMO_WISP}
+                engineKind={
+                  (engineDiag.wispUrl || browser.wispUrl) === MAIN_WISP ? "own" : (engineDiag.wispUrl || browser.wispUrl) === DEMO_WISP ? "demo" : "other"
+                }
                 onOpen={(url) => navigateTab(t.id, url)}
                 onSearch={(q) => navigateTab(t.id, SEARCH_PREFIX + encodeURIComponent(q))}
                 onOpenSettings={() => openApp("settings", { payload: { section: "browser" } })}
@@ -804,7 +817,7 @@ function StartPage({
   history,
   engineReady,
   engineWisp,
-  isDemoWisp,
+  engineKind,
   onOpen,
   onSearch,
   onOpenSettings,
@@ -813,7 +826,7 @@ function StartPage({
   history: { id: string; url: string; title: string }[];
   engineReady: boolean;
   engineWisp: string;
-  isDemoWisp: boolean;
+  engineKind: "own" | "demo" | "other";
   onOpen: (url: string) => void;
   onSearch: (q: string) => void;
   onOpenSettings: () => void;
@@ -882,15 +895,21 @@ function StartPage({
             <b className="text-neutral-600 dark:text-neutral-300">Motor {engineReady ? "activo" : "iniciando…"}</b>
             <span className="min-w-0 flex-1 truncate text-neutral-400">{engineWisp}</span>
           </div>
-          {isDemoWisp && (
+          {engineKind === "own" ? (
             <p>
-              Estás usando el transporte público de demostración de Mercury Workshop (externo, sin garantía). Para un transporte propio, despliega el servidor de <code>server/wisp-server.mjs</code> y configúralo en{" "}
+              Motor propio del estudio activo (wisp en Render). Si se cae, axcsOS conmuta solo al respaldo público y
+              vuelve cuando el propio recupera la salud.
+            </p>
+          ) : engineKind === "demo" ? (
+            <p>
+              Conectado al transporte público de demostración de Mercury Workshop (respaldo externo, sin garantía). El
+              motor propio del estudio se retomará automáticamente cuando responda. Puedes forzar el reintento desde{" "}
               <button onClick={onOpenSettings} className="font-semibold text-[var(--accent-os)] underline">
                 Ajustes → Navegador
               </button>
               .
             </p>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

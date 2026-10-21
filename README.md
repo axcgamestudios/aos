@@ -88,9 +88,10 @@ En localhost el navegador lo detecta automáticamente.
 
 - **Frontend**: estático. Este repo genera el export con `npm run build:pages`
   y lo publica en la rama `gh-pages` (GitHub Pages → https://axcgamestudios.github.io/aos/).
-- **Transporte wisp**: despliega `server/` en cualquier host Node (ver
-  [`server/README.md`](server/README.md)) y configura la URL `wss://…` en
-  Ajustes → Navegador.
+- **Transporte wisp**: el navegador usa por defecto el **motor propio del estudio**
+  (wisp-server-node en Render), auto-configurado por el sistema con cadena de
+  respaldo automática (motor propio → transporte demo público → wisp local en
+  desarrollo). Si quieres desplegar el tuyo, ver [`server/README.md`](server/README.md).
 
 ## 🗂️ Estructura
 

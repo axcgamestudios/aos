@@ -10,6 +10,7 @@ import {
   BAREMUX_VERSION,
   DEMO_WISP,
   LIBCURL_VERSION,
+  MAIN_WISP,
   SCRAMJET_VERSION,
   getDiagnostics,
   onDiagnostics,
@@ -535,8 +536,8 @@ function BrowserPane() {
           <div className="min-w-0 flex-1">
             <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Servidor de transporte (wisp)</p>
             <p className="mb-2 text-[10.5px] leading-relaxed text-neutral-400">
-              Configurado automáticamente por el sistema{diag.wispUrl ? `: ${diag.wispUrl}` : "."} Si el servidor público de
-              demostración cae, axcsOS lo detecta, prueba alternativas y reconecta solo.
+              Motor propio del estudio, configurado automáticamente{diag.wispUrl ? `: ${diag.wispUrl}` : "."} Si cae,
+              axcsOS conmuta solo al transporte público de respaldo y regresa cuando el propio responde.
             </p>
             <div className="flex gap-2">
               <button
@@ -550,13 +551,23 @@ function BrowserPane() {
             {diag.error && <p className="mt-1.5 text-[10.5px] text-rose-500">Motor: {diag.error}</p>}
           </div>
         </Row>
+        {diag.wispUrl === MAIN_WISP && (
+          <div className="flex items-start gap-2 border-t border-black/5 bg-emerald-500/10 px-4 py-2.5 text-[10.5px] leading-relaxed text-emerald-700 dark:border-white/5 dark:text-emerald-300">
+            <ShieldCheck size={13} className="mt-0.5 shrink-0" />
+            <span>
+              Conectado al motor propio del estudio (wisp-server-node en Render): primera prioridad, sin depender de
+              servicios públicos de terceros. Un mantenimiento en caliente del sistema lo mantiene despierto durante tu
+              sesión; si aun así cae, el respaldo automático toma el relevo.
+            </span>
+          </div>
+        )}
         {diag.wispUrl === DEMO_WISP && (
           <div className="flex items-start gap-2 border-t border-black/5 bg-amber-500/10 px-4 py-2.5 text-[10.5px] leading-relaxed text-amber-700 dark:border-white/5 dark:text-amber-300">
             <ShieldCheck size={13} className="mt-0.5 shrink-0" />
             <span>
-              El sistema usa el transporte público de demostración de Mercury Workshop (externo y sin garantía de
-              disponibilidad). axcsOS vigila su salud y se recupera solo si cae; para un uso intensivo puedes desplegar tu
-              propio servidor con <code>server/wisp-server.mjs</code>.
+              El motor propio del estudio no responde, así que axcsOS está usando ahora el transporte público de
+              demostración de Mercury Workshop (externo y sin garantía). La navegación sigue funcionando; el sistema
+              volverá al motor propio en cuanto recupere la salud (pruébalo con «Reparar motor»).
             </span>
           </div>
         )}

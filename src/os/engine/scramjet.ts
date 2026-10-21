@@ -19,17 +19,18 @@ export const SCRAMJET_VERSION = "1.1.0";
 export const BAREMUX_VERSION = "2.1.9";
 export const LIBCURL_VERSION = "1.5.2";
 
-/** Transporte de demostración público de Mercury Workshop (el de la demo oficial de Scramjet). Externo y no garantizado; configurable en Ajustes. */
+/** Motor propio del estudio: wisp-server-node desplegado en Render.
+ *  Verificado en vivo: handshake wisp v1 + CONNECT + HTTP 200 real a través del túnel.
+ *  Transporte principal del sistema (respaldado por la cadena de failover). */
+export const MAIN_WISP = "wss://wsn-c6o3.onrender.com/";
+/** Transporte de demostración público de Mercury Workshop (el de la demo oficial de Scramjet). Externo y sin garantía; SOLO respaldo si el motor propio cae. */
 export const DEMO_WISP = "wss://wisp.mercurywork.shop/";
 /** Wisp local para desarrollo (scripts/wisp-server.mjs). */
 export const LOCAL_WISP = "ws://localhost:3001/";
 
+/** Transporte del motor: configurado por el sistema (motor propio del estudio). */
 export function defaultWisp(): string {
-  if (typeof window !== "undefined") {
-    const h = window.location.hostname;
-    if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return LOCAL_WISP;
-  }
-  return DEMO_WISP;
+  return MAIN_WISP;
 }
 
 /** Ruta base de la app: '' en raíz, '/aos' en GitHub Pages. */
@@ -304,13 +305,19 @@ async function setTransportFresh(wispUrl: string): Promise<void> {
   lastWispUrl = wispUrl;
 }
 
-/** Comprueba la cadena de wisps y aplica el primero sano. Devuelve el wisp activo. */
+/** Comprueba la cadena de wisps y aplica el primero sano. Devuelve el wisp activo.
+ *  Cadena: motor propio (Render) → demo público → wisp local (solo desarrollo). */
 export async function ensureHealthyWisp(): Promise<string> {
   const cur = currentWisp || lastWispUrl || defaultWisp();
   const isLocal = typeof window !== "undefined" && ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
-  const chain = [cur, DEMO_WISP, ...(isLocal ? [LOCAL_WISP] : [])];
+  const chain = [cur, MAIN_WISP, DEMO_WISP, ...(isLocal ? [LOCAL_WISP] : [])];
+  const seen = new Set<string>();
   for (const wisp of chain) {
-    const r = await testWisp(wisp, 5000);
+    if (seen.has(wisp)) continue;
+    seen.add(wisp);
+    // El motor propio puede estar frío (Render se duerme sin tráfico): margen
+    // amplio para el primer arranque; el resto de la cadena se prueba rápido.
+    const r = await testWisp(wisp, wisp === MAIN_WISP ? 25000 : 6000);
     if (r.ok) {
       if (wisp !== cur) await setTransportFresh(wisp);
       updateDiag({ wispUrl: wisp, status: controller || diag.scriptsLoaded ? "ready" : "idle", transportSet: true, error: undefined });
@@ -318,6 +325,46 @@ export async function ensureHealthyWisp(): Promise<string> {
     }
   }
   return cur; // nada sano: se queda con el actual, los reintentos lo volverán a probar
+}
+
+/* ---------- keepalive del motor propio ----------
+   El motor vive en Render (plan gratuito): sin tráfico, la instancia se
+   duerme y la primera navegación tarda 30-60 s en despertar. Mantenemos un
+   WebSocket mínimo abierto durante toda la sesión del OS para que el motor
+   esté siempre caliente; si la conexión se corta, se reanuda sola. */
+let keepaliveStarted = false;
+let keepaliveWs: WebSocket | null = null;
+let keepaliveTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function startWispKeepalive(): void {
+  if (keepaliveStarted || typeof window === "undefined") return;
+  keepaliveStarted = true;
+  const tick = (delay: number) => {
+    keepaliveTimer = setTimeout(() => {
+      try {
+        keepaliveWs?.close();
+      } catch {
+        /* ya estaba cerrado */
+      }
+      try {
+        const ws = new WebSocket(MAIN_WISP);
+        keepaliveWs = ws;
+        ws.onopen = () => {
+          // señal de depuración/E2E: el motor propio está caliente
+          (window as unknown as { __wispKeepalive?: boolean }).__wispKeepalive = true;
+        };
+        ws.onclose = () => {
+          if (ws === keepaliveWs) tick(20000); // reconexión periódica
+        };
+        ws.onerror = () => {
+          /* onclose llegará después */
+        };
+      } catch {
+        tick(60000);
+      }
+    }, delay);
+  };
+  tick(0);
 }
 
 /** Repara el motor tras una caída. Idempotente y seguro de llamar en cualquier momento. */

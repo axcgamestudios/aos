@@ -17,7 +17,7 @@ import type {
 } from "./types";
 import { DEFAULT_WALLPAPER } from "./wallpapers";
 import { getAppDef } from "./registry";
-import { defaultWisp } from "./engine/scramjet";
+import { defaultWisp, startWispKeepalive } from "./engine/scramjet";
 
 const MENUBAR_H = 30;
 const DOCK_RESERVED = 96;
@@ -220,6 +220,8 @@ export const useOS = create<OsStore>()(
       finishBoot: () => set({ booted: true, stage: "login" }),
       login: () => {
         set({ stage: "desktop" });
+        // mantiene el motor de navegación propio (Render) caliente durante la sesión
+        startWispKeepalive();
         setTimeout(() => {
           get().notify("finder", "Bienvenido", "Sesión iniciada. Disfruta de axcsOS.");
         }, 900);
@@ -523,8 +525,10 @@ export const useOS = create<OsStore>()(
           browser: {
             ...current.browser,
             ...(p.browser ?? {}),
-            // wispUrl vacío = usar el valor por defecto inteligente en runtime
-            wispUrl: p.browser?.wispUrl || defaultWisp(),
+            // migración: el transporte ya no se configura a mano — el valor
+            // persistido (p. ej. el demo público antiguo) se sustituye por el
+            // motor propio del estudio configurado por el sistema
+            wispUrl: defaultWisp(),
             // migración: el valor antiguo "ddg" pasa a "bing"
             searchEngine: p.browser?.searchEngine === "searxng" ? "searxng" : "bing",
           },
