@@ -18,6 +18,7 @@ node_modules
 /out/
 
 # production
+sjtest.html
 /build
 
 # misc

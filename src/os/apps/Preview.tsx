@@ -5,7 +5,7 @@ import { Minus, Plus } from "lucide-react";
 import type { AppProps } from "../types";
 
 export default function PreviewApp({ win }: AppProps) {
-  const image = (win.payload?.image as string) ?? "/wallpapers/tahoe-dark.png";
+  const image = (win.payload?.image as string) ?? "wallpapers/tahoe-dark.png";
   const [zoom, setZoom] = useState(1);
   return (
     <div className="flex h-full flex-col bg-neutral-900">

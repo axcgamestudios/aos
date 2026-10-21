@@ -85,18 +85,18 @@ const ROOT: FsNode = {
       name: "Descargas",
       type: "folder",
       children: [
-        { name: "captura-mac-web.png", type: "image", image: "/wallpapers/tahoe-dark.png", size: "1,8 MB" },
-        { name: "fondo-sequoia.png", type: "image", image: "/wallpapers/sequoia.png", size: "2,1 MB" },
+        { name: "captura-mac-web.png", type: "image", image: "wallpapers/tahoe-dark.png", size: "1,8 MB" },
+        { name: "fondo-sequoia.png", type: "image", image: "wallpapers/sequoia.png", size: "2,1 MB" },
       ],
     },
     {
       name: "Imágenes",
       type: "folder",
       children: [
-        { name: "Tahoe Oscuro.png", type: "image", image: "/wallpapers/tahoe-dark.png", size: "2,4 MB" },
-        { name: "Tahoe Claro.png", type: "image", image: "/wallpapers/tahoe-light.png", size: "2,2 MB" },
-        { name: "Sequoia.png", type: "image", image: "/wallpapers/sequoia.png", size: "2,1 MB" },
-        { name: "Sonoma.png", type: "image", image: "/wallpapers/sonoma.png", size: "2,0 MB" },
+        { name: "Tahoe Oscuro.png", type: "image", image: "wallpapers/tahoe-dark.png", size: "2,4 MB" },
+        { name: "Tahoe Claro.png", type: "image", image: "wallpapers/tahoe-light.png", size: "2,2 MB" },
+        { name: "Sequoia.png", type: "image", image: "wallpapers/sequoia.png", size: "2,1 MB" },
+        { name: "Sonoma.png", type: "image", image: "wallpapers/sonoma.png", size: "2,0 MB" },
       ],
     },
     {
@@ -160,7 +160,7 @@ export default function FinderApp({ win }: AppProps) {
   const items = useMemo<FsNode[]>(() => {
     if (isTrash) {
       return [
-        { name: "captura-vieja.png", type: "image", image: "/wallpapers/sonoma.png", size: "0,9 MB" },
+        { name: "captura-vieja.png", type: "image", image: "wallpapers/sonoma.png", size: "0,9 MB" },
         { name: "borrador.txt", type: "txt", content: "(vacío)", size: "1 KB" },
       ];
     }

@@ -480,3 +480,17 @@ export const AxcMark: IconType = ({ className }) => (
     </text>
   </svg>
 );
+
+/* ============ Iconos de imagen oficiales de axcgamestudios ============
+   Rutas relativas al documento: funcionan en / (dev) y /aos/ (GitHub Pages). */
+const imgIcon = (src: string): IconType => ({ className }) => (
+  // eslint-disable-next-line @next/next/no-img-element
+  <img src={src} alt="" className={className} draggable={false} />
+);
+
+export const FinderLogoIcon = imgIcon("icons/finder.jpg");
+export const AxcGamesLogoIcon = imgIcon("icons/axcgames.jpg");
+export const SafariLogoIcon = imgIcon("icons/safari.png");
+export const NotesLogoIcon = imgIcon("icons/notes.png");
+export const CalculatorLogoIcon = imgIcon("icons/calculator.jpg");
+export const SettingsLogoIcon = imgIcon("icons/settings.png");

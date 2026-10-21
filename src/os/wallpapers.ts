@@ -11,31 +11,31 @@ export const WALLPAPERS: Wallpaper[] = [
   {
     id: "goldengate",
     name: "Golden Gate",
-    css: "url('/wallpapers/goldengate.png') center/cover no-repeat",
+    css: "url('wallpapers/goldengate.png') center/cover no-repeat",
     dark: true,
   },
   {
     id: "tahoe-dark",
     name: "Tahoe (Oscuro)",
-    css: "url('/wallpapers/tahoe-dark.png') center/cover no-repeat",
+    css: "url('wallpapers/tahoe-dark.png') center/cover no-repeat",
     dark: true,
   },
   {
     id: "tahoe-light",
     name: "Tahoe (Claro)",
-    css: "url('/wallpapers/tahoe-light.png') center/cover no-repeat",
+    css: "url('wallpapers/tahoe-light.png') center/cover no-repeat",
     dark: false,
   },
   {
     id: "sequoia",
     name: "Sequoia",
-    css: "url('/wallpapers/sequoia.png') center/cover no-repeat",
+    css: "url('wallpapers/sequoia.png') center/cover no-repeat",
     dark: true,
   },
   {
     id: "sonoma",
     name: "Sonoma",
-    css: "url('/wallpapers/sonoma.png') center/cover no-repeat",
+    css: "url('wallpapers/sonoma.png') center/cover no-repeat",
     dark: false,
   },
   {

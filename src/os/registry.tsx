@@ -11,6 +11,12 @@ import {
   SafariIcon,
   SettingsIcon,
   TerminalIcon,
+  FinderLogoIcon,
+  AxcGamesLogoIcon,
+  SafariLogoIcon,
+  NotesLogoIcon,
+  CalculatorLogoIcon,
+  SettingsLogoIcon,
 } from "./icons";
 import AxcGamesApp from "./apps/AxcGames";
 import SafariApp from "./apps/Safari";
@@ -65,7 +71,7 @@ export const APPS: AppDef[] = [
   {
     id: "finder",
     name: "Finder",
-    icon: FinderIcon,
+    icon: FinderLogoIcon,
     component: FinderApp,
     defaultSize: { w: 760, h: 500 },
     minSize: { w: 560, h: 360 },
@@ -84,7 +90,7 @@ export const APPS: AppDef[] = [
   {
     id: "axcgames",
     name: "AXCGAMES",
-    icon: AxcGamesIcon,
+    icon: AxcGamesLogoIcon,
     component: AxcGamesApp,
     defaultSize: { w: 1100, h: 700 },
     minSize: { w: 420, h: 320 },
@@ -101,7 +107,7 @@ export const APPS: AppDef[] = [
   {
     id: "safari",
     name: "Safari",
-    icon: SafariIcon,
+    icon: SafariLogoIcon,
     component: SafariApp,
     defaultSize: { w: 1020, h: 660 },
     minSize: { w: 460, h: 340 },
@@ -120,7 +126,7 @@ export const APPS: AppDef[] = [
   {
     id: "notes",
     name: "Notas",
-    icon: NotesIcon,
+    icon: NotesLogoIcon,
     component: NotesApp,
     defaultSize: { w: 780, h: 520 },
     minSize: { w: 520, h: 340 },
@@ -136,7 +142,7 @@ export const APPS: AppDef[] = [
   {
     id: "calculator",
     name: "Calculadora",
-    icon: CalculatorIcon,
+    icon: CalculatorLogoIcon,
     component: CalculatorApp,
     defaultSize: { w: 250, h: 380 },
     minSize: { w: 220, h: 340 },
@@ -163,7 +169,7 @@ export const APPS: AppDef[] = [
   {
     id: "settings",
     name: "Ajustes del Sistema",
-    icon: SettingsIcon,
+    icon: SettingsLogoIcon,
     component: SettingsApp,
     defaultSize: { w: 760, h: 540 },
     minSize: { w: 560, h: 400 },
