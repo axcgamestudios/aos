@@ -193,11 +193,18 @@ export function clearStoredSession(): void {
 
 /* ---------- guardián de sesión: 1 dispositivo por cuenta ----------
    Al iniciar sesión se publica (RETENIDO) la sesión activa de la cuenta
-   en axcsos/auth/s/{accountId}. Todos los dispositivos con esa cuenta
-   están suscritos: si llega una sesión de OTRO dispositivo, este cierra
-   sesión al instante. Si un dispositivo estaba desconectado, al
-   reconectarse recibe la sesión retenida más reciente y comprueba si
-   sigue siendo la suya. */
+   en axcsos/auth/s/{accountId}. Regla: EL ÚLTIMO INICIO DE SESIÓN GANA.
+   - Mensaje EN VIVO (no retenido) de otro dispositivo → esa sesión acaba
+     de entrar: esta se expulsa al instante.
+   - Mensaje RETENIDO de otro dispositivo con marca de tiempo MÁS NUEVA que
+     el arranque de esta sesión → la cuenta se movió mientras no miraba:
+     esta se expulsa.
+   - Mensaje retenido MÁS VIEJO que esta sesión (resto de un dispositivo
+     muerto o de un inicio anterior) → se ignora: esta sesión es la última
+     y su publicación reemplaza el retenido.
+   Así, limpiar el navegador o cambiar de dispositivo no deja a la cuenta
+   bloqueada por mensajes viejos, y el mismo dispositivo en varias pestañas
+   sigue permitido. */
 const BROKERS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt", "wss://broker.mosquitto.org:8081/mqtt"];
 
 export type GuardState = "off" | "connecting" | "online";
@@ -251,6 +258,7 @@ export async function startSessionGuard(
   const deviceId = getDeviceId();
   const topic = `axcsos/auth/s/${accountId}`;
   const myPayload = JSON.stringify({ token, deviceId, ts: Date.now() });
+  const mySessionStart = Date.now();
   let kicked = false;
   let brokerIdx = 0;
 
@@ -294,14 +302,17 @@ export async function startSessionGuard(
       });
     });
 
-    client.on("message", (t, msg) => {
+    client.on("message", (t, msg, packet) => {
       if (kicked || t !== topic || guardClient !== client) return;
       try {
-        const m = JSON.parse(msg.toString()) as { token?: string; deviceId?: string };
+        const m = JSON.parse(msg.toString()) as { token?: string; deviceId?: string; ts?: number };
         if (!m || typeof m.token !== "string") return;
         if (m.token === token) return; // eco de mi propia sesión
         if (m.deviceId === deviceId) return; // otra pestaña del MISMO dispositivo: permitido
-        // sesión desde otro dispositivo: esta cuenta ya solo vive allí
+        const isRetained = !!(packet && (packet as { retain?: boolean }).retain);
+        // retenido más viejo que esta sesión: resto de un inicio anterior → yo soy el último inicio
+        if (isRetained && (!m.ts || m.ts <= mySessionStart)) return;
+        // sesión desde otro dispositivo (en vivo, o retenida más nueva): la cuenta ya vive allí
         kicked = true;
         stopSessionGuard();
         onKicked("La cuenta se ha iniciado en otro dispositivo.");

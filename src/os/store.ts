@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { stopSessionGuard } from "./services/auth";
+import { clearStaySession } from "./services/axcid";
 import type {
   Bookmark,
   BrowserSettings,
@@ -92,6 +93,7 @@ interface OsStore {
   minimizeWindow: (id: string) => void;
   restoreWindow: (id: string) => void;
   zoomWindow: (id: string) => void;
+  refitMaximized: () => void;
   setWindowRect: (id: string, rect: Partial<Rect>) => void;
   setWindowTitle: (id: string, title: string) => void;
   minimizeActive: () => void;
@@ -240,6 +242,7 @@ export const useOS = create<OsStore>()(
       },
       logout: () => {
         stopSessionGuard(); // 1 dispositivo por cuenta: esta sesión deja de afirmarse
+        clearStaySession(); // la cookie de «no volver a iniciar sesión» se va con la sesión
         set({
           stage: "login",
           session: null,
@@ -253,6 +256,7 @@ export const useOS = create<OsStore>()(
       },
       logoutFromKick: (message) => {
         stopSessionGuard();
+        clearStaySession(); // la cuenta pasó a otro dispositivo: aquí ya no se recuerda
         set({
           stage: "login",
           session: null,
@@ -378,16 +382,29 @@ export const useOS = create<OsStore>()(
             if (w.maximized && w.prevRect) {
               return { ...w, ...w.prevRect, maximized: false, prevRect: undefined };
             }
+            // zoom a borde de pantalla: sin márgenes laterales, bajo la barra de menú, sobre el dock
             return {
               ...w,
               prevRect: { x: w.x, y: w.y, w: w.w, h: w.h },
-              x: 8,
-              y: MENUBAR_H + 6,
-              w: vw - 16,
-              h: vh - MENUBAR_H - 6 - 78,
+              x: 0,
+              y: MENUBAR_H,
+              w: vw,
+              h: vh - MENUBAR_H - DOCK_RESERVED,
               maximized: true,
             };
           }),
+        });
+      },
+
+      // al cambiar el tamaño de la ventana del navegador, las ventanas maximizadas vuelven a encajar
+      refitMaximized: () => {
+        const state = get();
+        const vw = typeof window !== "undefined" ? window.innerWidth : 1440;
+        const vh = typeof window !== "undefined" ? window.innerHeight : 900;
+        set({
+          windows: state.windows.map((w) =>
+            w.maximized ? { ...w, x: 0, y: MENUBAR_H, w: vw, h: vh - MENUBAR_H - DOCK_RESERVED } : w,
+          ),
         });
       },
 

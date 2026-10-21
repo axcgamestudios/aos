@@ -23,6 +23,7 @@ import { useOS, setDownloadObjectUrl } from "../store";
 import YouTubeApp, { parseYouTubeUrl } from "./YouTube";
 import {
   appBase,
+  applyTransport,
   DEMO_WISP,
   ensureEngine,
   engineFetch,
@@ -62,6 +63,8 @@ interface Tab {
   history: string[]; // historial de la pestaña (URLs/acciones)
   hIndex: number; // posición actual en el historial
   rNonce?: number; // contador para forzar recarga de vistas nativas (YouTube)
+  fNonce?: number; // contador para forzar iframe limpio al alternar motor ↔ directo
+  direct?: boolean; // modo conexión directa: iframe real SIN motor (IP del usuario)
   error?: string; // error visible de carga (p. ej. motor sin respuesta), con reintento
 }
 
@@ -108,6 +111,57 @@ function tabUid(): string {
   return `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
+/* ---------- memoria de sitios que cargan bien en directo (IP del usuario) ----------
+   Cuando un sitio bloquea la IP de los motores (p. ej. CloudFront) pero permite
+   mostrarse en un iframe, se recuerda para ir directo a la primera la próxima vez. */
+const LS_DIRECT_OK = "axcsos.safari.direct-ok";
+function directOkHosts(): string[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(LS_DIRECT_OK) ?? "[]") as string[];
+    return Array.isArray(list) ? list.slice(-40) : [];
+  } catch {
+    return [];
+  }
+}
+function rememberDirectOk(host: string): void {
+  if (!host) return;
+  try {
+    const list = directOkHosts();
+    if (!list.includes(host)) {
+      list.push(host);
+      localStorage.setItem(LS_DIRECT_OK, JSON.stringify(list.slice(-40)));
+    }
+  } catch {
+    /* sin almacenamiento: la memoria vive solo esta sesión */
+  }
+}
+
+/* ¿el motor entregó una página de error del servidor (403/Access Denied,
+   desafío anti-bot…)? Esas páginas NO cuentan como carga real: la escalera sigue. */
+function looksLikeErrorPage(doc: Document | null | undefined): boolean {
+  try {
+    if (!doc || !doc.body) return false;
+    if (doc.getElementsByTagName("*").length > 30) return false; // página con contenido real
+    const txt = `${doc.title ?? ""} ${doc.body.innerText ?? ""}`.toLowerCase();
+    return /access denied|forbidden|error 40[0-9]|40[0-9] error|just a moment|attention required|not found|no se encontr|internal server error|bad gateway|service unavailable/.test(txt);
+  } catch {
+    return false; // cross-origin o sin documento: no es una página de error legible
+  }
+}
+
+/* escalera de carga por pestaña: motor propio → motor de respaldo → conexión directa → error honesto */
+type LadderPhase = "engine" | "engineRetry" | "direct" | "error";
+interface Ladder {
+  start: number;
+  lastProgress: number; // último instante con progreso real del documento
+  lastSig: string; // firma del documento (motor: mismo origen)
+  direct: boolean; // fase actual en directo
+  queue: LadderPhase[]; // siguientes intentos si esta fase se estanca
+}
+const STALL_MS = 14000; // sin progreso del documento
+const MIN_TOTAL_MS = 18000; // margen mínimo antes de declarar el estancamiento
+const HARD_CAP_MS = 80000; // pasado este tiempo se sube de escalón pase lo que pase
+
 export default function SafariApp({ win }: AppProps) {
   const initialUrl = (win.payload?.url as string) ?? START;
   const winId = win.id;
@@ -146,8 +200,8 @@ export default function SafariApp({ win }: AppProps) {
   const ctrlRef = useRef<ScramjetControllerApi | null>(null);
   const framesRef = useRef<Map<string, ScramjetFrameApi>>(new Map());
   const iframeRefs = useRef<Map<string, HTMLIFrameElement>>(new Map());
-  // ventana temporal de carga por pestaña para el watchdog (stage 0 = primera espera, 1 = tras reintento)
-  const hangRef = useRef<Map<string, { start: number; stage: number }>>(new Map());
+  // escalera de carga por pestaña (motor → respaldo → directo → error)
+  const hangRef = useRef<Map<string, Ladder>>(new Map());
   const tabsRef = useRef(tabs);
   const activeRef = useRef(activeTab);
   tabsRef.current = tabs;
@@ -344,20 +398,46 @@ export default function SafariApp({ win }: AppProps) {
     (frame: ScramjetFrameApi, id: string) => {
       frame.addEventListener("urlchange", (e) => {
         const u = (e as unknown as { url: string }).url;
-        hangRef.current.delete(id); // el motor entregó página: los datos fluyen
+        // el motor entregó el documento: progreso real para la escalera
+        const h = hangRef.current.get(id);
+        if (h) {
+          h.lastProgress = Date.now();
+          h.lastSig = "";
+        }
         patchTab(id, { url: u, favicon: faviconFor(u), error: undefined });
         addHistory(u, hostOf(u));
         // mantener la entrada actual del historial de pestaña sincronizada (SPAs)
-        setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, history: t.history.map((h, i) => (i === t.hIndex ? u : h)) } : t)));
+        setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, history: t.history.map((h2, i) => (i === t.hIndex ? u : h2)) } : t)));
         readPageMetaSoon(id);
       });
       frame.addEventListener("navigate", () => {
-        hangRef.current.set(id, { start: Date.now(), stage: 0 }); // ventana nueva para el watchdog
+        // ventana de carga nueva dentro de la pestaña (navegación interna)
+        hangRef.current.set(id, { start: Date.now(), lastProgress: Date.now(), lastSig: "", direct: false, queue: ["engineRetry", "direct", "error"] });
         patchTab(id, { loading: true, error: undefined });
       });
     },
     [addHistory, patchTab, readPageMetaSoon]
   );
+
+  /* desbloqueo defensivo de scroll: sitios que fijan overflow:hidden en la raíz
+     (pensando que son la ventana principal) dejan el contenido recortado dentro
+     del iframe sin poder scrollear. Si el contenido desborda y el scroller raíz
+     está bloqueado, se libera. */
+  const unlockRootScroll = useCallback((id: string) => {
+    try {
+      const doc = iframeRefs.current.get(id)?.contentDocument;
+      if (!doc || !doc.documentElement || !doc.body) return;
+      const de = doc.documentElement;
+      const overflowHidden = /hidden|clip/.test(getComputedStyle(de).overflowY) || /hidden|clip/.test(getComputedStyle(doc.body).overflowY);
+      const overflows = de.scrollHeight > de.clientHeight + 8;
+      if (overflowHidden && overflows) {
+        de.style.overflowY = "auto";
+        doc.body.style.overflowY = "visible";
+      }
+    } catch {
+      /* cross-origin o sin documento: nada que hacer */
+    }
+  }, []);
 
   /* reintenta la navegación con un frame NUEVO del motor (tras una caída: el
      frame viejo puede quedar enganchado a un SharedWorker/ws muerto) */
@@ -373,7 +453,8 @@ export default function SafariApp({ win }: AppProps) {
         framesRef.current.set(id, fresh);
         wireFrameEvents(fresh, id);
         fresh.go(url);
-        hangRef.current.set(id, { start: Date.now(), stage: 1 }); // ya con un reintento encima
+        // ya es un reintento del motor: si vuelve a estancarse, toca directo
+        hangRef.current.set(id, { start: Date.now(), lastProgress: Date.now(), lastSig: "", direct: false, queue: ["direct", "error"] });
         return true;
       } catch (e) {
         console.error("[safari] reintento con frame nuevo:", e);
@@ -383,29 +464,105 @@ export default function SafariApp({ win }: AppProps) {
     [browser.wispUrl, waitForIframe, wireFrameEvents]
   );
 
-  /* pestaña colgada >22 s: ¿motor medio muerto (WS abierto pero sin datos)
-     o simplemente sitio lento? La prueba honesta lo distingue y solo si el
-     motor NO fluye se recupera y reintenta con frame nuevo. */
-  const handleHungTab = useCallback(
-    async (t: Tab) => {
-      const activeWisp = getDiagnostics().wispUrl || browser.wispUrl;
-      const probe = await testWisp(activeWisp, 9000);
-      if (probe.ok) return; // el motor fluye: el sitio va lento, se le da margen
-      notify("safari", "Motor sin flujo", "Recuperando el motor y reintentando la página…");
+  /* firma del progreso real del documento (solo en modo motor: mismo origen) */
+  const pageSig = useCallback((id: string): string => {
+    try {
+      const iframe = iframeRefs.current.get(id);
+      const doc = iframe?.contentDocument;
+      if (!doc || !doc.documentElement) return "";
+      let nodes = 0;
       try {
-        await recoverEngine("carga colgada");
-        await retryFreshFrame(t.id, t.url);
-      } catch (e) {
-        console.error("[safari] recuperación tras cuelgue:", e);
+        nodes = doc.getElementsByTagName("*").length;
+      } catch {
+        nodes = 0;
       }
+      return `${doc.readyState}|${nodes}|${doc.title ?? ""}`;
+    } catch {
+      return ""; // cross-origin (modo directo) o sin documento todavía
+    }
+  }, []);
+
+  /* ejecuta una fase de la escalera de carga de una pestaña */
+  const runPhase = useCallback(
+    async (t: Tab, phase: LadderPhase, queueAfter: LadderPhase[]) => {
+      const now = Date.now();
+      hangRef.current.set(t.id, { start: now, lastProgress: now, lastSig: "", direct: phase === "direct", queue: queueAfter });
+
+      if (phase === "engine") {
+        // vuelta de directo al motor: iframe limpio y frame nuevo
+        framesRef.current.delete(t.id);
+        patchTab(t.id, { direct: false, loading: true, error: undefined });
+        notify("safari", "Reintentando con el motor", `${hostOf(t.url)} no cargó en directo; probando con el motor…`);
+        setTimeout(() => void retryFreshFrame(t.id, t.url), 250); // margen para remontar el iframe
+        return;
+      }
+
+      if (phase === "engineRetry") {
+        const activeWisp = getDiagnostics().wispUrl || browser.wispUrl;
+        const probe = await testWisp(activeWisp, 9000);
+        if (!probe.ok) {
+          // motor medio muerto (WS abierto sin datos): recuperación real
+          notify("safari", "Motor sin flujo", "Recuperando el motor y reintentando la página…");
+          try {
+            await recoverEngine("carga colgada");
+          } catch (e) {
+            console.error("[safari] recuperación tras cuelgue:", e);
+          }
+          await retryFreshFrame(t.id, t.url);
+          return;
+        }
+        // el motor fluye pero ESTE sitio no avanza → probar el OTRO motor (IP distinta)
+        const alt = activeWisp === MAIN_WISP ? DEMO_WISP : MAIN_WISP;
+        if (alt !== activeWisp) {
+          const altProbe = await testWisp(alt, 12000);
+          if (altProbe.ok) {
+            notify("safari", "Cambiando de motor", `Reintentando ${hostOf(t.url)} con el motor de respaldo…`);
+            try {
+              await applyTransport(alt);
+              updateBrowser({ wispUrl: alt }); // ajuste visible y sincronizado en Ajustes
+            } catch (e) {
+              console.error("[safari] cambio a motor de respaldo:", e);
+            }
+          }
+        }
+        await retryFreshFrame(t.id, t.url);
+        return;
+      }
+
+      if (phase === "direct") {
+        // conexión directa: el iframe carga el sitio real con la IP del usuario,
+        // sin motor. Funciona con sitios que permiten mostrarse en un marco.
+        framesRef.current.delete(t.id);
+        notify("safari", "Conexión directa", `${hostOf(t.url)} no responde por el motor; probando desde tu conexión…`);
+        patchTab(t.id, { direct: true, loading: true, error: undefined });
+        // si tuvimos que cambiar al motor de respaldo para este sitio, volver al propio
+        // (si sigue sano) para las próximas navegaciones normales
+        const activeNow = getDiagnostics().wispUrl || browser.wispUrl;
+        if (activeNow === DEMO_WISP) {
+          void testWisp(MAIN_WISP, 8000)
+            .then((r) => (r.ok ? applyTransport(MAIN_WISP) : undefined))
+            .then(() => {
+              if (getDiagnostics().wispUrl === MAIN_WISP) updateBrowser({ wispUrl: MAIN_WISP });
+            })
+            .catch(() => {});
+        }
+        return;
+      }
+
+      // fase "error": error honesto tras agotar la escalera
+      hangRef.current.delete(t.id);
+      patchTab(t.id, {
+        loading: false,
+        error: `${hostOf(t.url)} no cargó: se probó el motor propio, el de respaldo y la conexión directa. Puede que el sitio bloquee este tipo de acceso (IP de servidor o prohibición de marcos).`,
+      });
+      notify("safari", "Página sin respuesta", `${hostOf(t.url)} no cargó tras agotar los intentos.`);
     },
-    [browser.wispUrl, notify, retryFreshFrame]
+    [browser.wispUrl, notify, patchTab, retryFreshFrame, updateBrowser]
   );
 
-  /* watchdog de carga: ninguna pestaña puede quedarse "cargando" para siempre
-     (el motor dormido abre el WS pero no hace fluir datos → spinner eterno).
-     A los 22 s se diagnostica y reintenta; si 22 s después sigue igual, se
-     declara el error de forma honesta con botón de reintento. */
+  /* escalera de carga: ninguna pestaña puede quedarse "cargando" para siempre.
+     Se mide el PROGRESO REAL del documento (nodos, readyState, título); si se
+     estanca, se sube de escalón: motor → respaldo → directo → error honesto. */
   useEffect(() => {
     const iv = setInterval(() => {
       const now = Date.now();
@@ -415,20 +572,27 @@ export default function SafariApp({ win }: AppProps) {
           continue;
         }
         const h = hangRef.current.get(t.id);
-        if (!h) continue; // sin ventana temporal (p. ej. motor aún inicializando)
-        if (h.stage === 0 && now - h.start > 22000) {
-          h.start = now;
-          h.stage = 1;
-          void handleHungTab(t);
-        } else if (h.stage >= 1 && now - h.start > 22000) {
-          hangRef.current.delete(t.id);
-          patchTab(t.id, { loading: false, error: `El motor no respondió al intentar cargar ${hostOf(t.url)}.` });
-          notify("safari", "Página sin respuesta", `${hostOf(t.url)} no cargó. Reintenta o revisa el motor en Ajustes.`);
+        if (!h) continue; // sin escalera (p. ej. motor aún inicializando)
+        if (!h.direct) {
+          const sig = pageSig(t.id);
+          if (sig && sig !== h.lastSig) {
+            h.lastSig = sig;
+            h.lastProgress = now;
+          }
+        }
+        const stalled = now - h.lastProgress > STALL_MS && now - h.start > MIN_TOTAL_MS;
+        const overdue = now - h.start > HARD_CAP_MS;
+        if (!stalled && !overdue) continue;
+        const next = h.queue.shift();
+        if (!next || next === "error") {
+          void runPhase(t, "error", []);
+        } else {
+          void runPhase(t, next, h.queue);
         }
       }
     }, 2500);
     return () => clearInterval(iv);
-  }, [handleHungTab, notify, patchTab]);
+  }, [pageSig, runPhase]);
 
   const navigateTab = useCallback(
     async (id: string, rawUrl: string, opts?: { push?: boolean }) => {
@@ -449,22 +613,46 @@ export default function SafariApp({ win }: AppProps) {
       );
 
       if (url === START) {
-        patchTab(id, { url: START, title: "Nueva pestaña", favicon: "", loading: false });
+        patchTab(id, { url: START, title: "Nueva pestaña", favicon: "", loading: false, direct: false });
         return;
       }
       if (url.startsWith(SEARCH_PREFIX)) {
-        patchTab(id, { url, title: `Búsqueda: ${decodeURIComponent(url.slice(SEARCH_PREFIX.length))}`, favicon: "", loading: false });
+        patchTab(id, { url, title: `Búsqueda: ${decodeURIComponent(url.slice(SEARCH_PREFIX.length))}`, favicon: "", loading: false, direct: false });
         return;
       }
 
       // YouTube → cliente 100% nativo del OS (sin Scramjet, sin login)
       if (parseYouTubeUrl(url)) {
-        patchTab(id, { url, title: "YouTube", favicon: faviconFor(url), loading: false });
+        patchTab(id, { url, title: "YouTube", favicon: faviconFor(url), loading: false, direct: false });
         addHistory(url, hostOf(url));
         return;
       }
 
-      patchTab(id, { url, title: hostOf(url), favicon: faviconFor(url), loading: true, error: undefined });
+      const host = hostOf(url);
+
+      // sitios que ya cargaron bien en directo (IP del usuario) → directo a la primera
+      if (directOkHosts().includes(host)) {
+        patchTab(id, {
+          url,
+          title: host,
+          favicon: faviconFor(url),
+          loading: true,
+          error: undefined,
+          direct: true,
+          ...(tab.direct ? { fNonce: Date.now() } : {}),
+        });
+        hangRef.current.set(id, { start: Date.now(), lastProgress: Date.now(), lastSig: "", direct: true, queue: ["engine", "engineRetry", "error"] });
+        addHistory(url, host);
+        return;
+      }
+
+      const wasDirect = !!tab.direct;
+      patchTab(id, { url, title: host, favicon: faviconFor(url), loading: true, error: undefined, direct: false });
+      if (wasDirect) {
+        // venimos de un iframe directo: margen para que React remonte el iframe limpio
+        await new Promise((r) => setTimeout(r, 250));
+        framesRef.current.delete(id);
+      }
       try {
         const ctrl = await ensureEngine(browser.wispUrl);
         ctrlRef.current = ctrl;
@@ -496,7 +684,7 @@ export default function SafariApp({ win }: AppProps) {
           wireFrameEvents(frame, id);
         }
         frame.go(url);
-        hangRef.current.set(id, { start: Date.now(), stage: 0 });
+        hangRef.current.set(id, { start: Date.now(), lastProgress: Date.now(), lastSig: "", direct: false, queue: ["engineRetry", "direct", "error"] });
       } catch (e) {
         console.error("[safari] navegación:", e);
         // auto-recuperación + reintento con frame nuevo (el viejo puede estar roto)
@@ -560,6 +748,7 @@ export default function SafariApp({ win }: AppProps) {
       });
       framesRef.current.delete(id);
       iframeRefs.current.delete(id);
+      hangRef.current.delete(id);
       // si cerramos la activa, activar la anterior (o la siguiente)
       if (idx >= 0) {
         setActiveTab((a) => {
@@ -597,13 +786,19 @@ export default function SafariApp({ win }: AppProps) {
         setTimeout(() => patchTab(t.id, { loading: false }), 350);
         return;
       }
+      // modo directo: recarga = remontar el iframe real
+      if (t.direct) {
+        patchTab(t.id, { fNonce: Date.now(), loading: true, error: undefined });
+        hangRef.current.set(t.id, { start: Date.now(), lastProgress: Date.now(), lastSig: "", direct: true, queue: ["engine", "engineRetry", "error"] });
+        return;
+      }
       const frame = framesRef.current.get(t.id);
       if (!frame) {
         void navigateTab(t.id, t.url, { push: false });
         return;
       }
       patchTab(t.id, { loading: true, error: undefined });
-      hangRef.current.set(t.id, { start: Date.now(), stage: 0 });
+      hangRef.current.set(t.id, { start: Date.now(), lastProgress: Date.now(), lastSig: "", direct: false, queue: ["engineRetry", "direct", "error"] });
       try {
         frame.reload();
       } catch (e) {
@@ -765,6 +960,14 @@ export default function SafariApp({ win }: AppProps) {
             </button>
           )}
         </form>
+        {activeTabData?.direct && (
+          <span
+            className="flex h-[18px] shrink-0 items-center rounded-full bg-sky-500/15 px-2 text-[9.5px] font-semibold text-sky-600 dark:text-sky-400"
+            title="Esta pestaña usa conexión directa (tu IP), sin motor: la usan los sitios que bloquean la IP de los motores pero permiten mostrarse aquí."
+          >
+            directa
+          </span>
+        )}
         <button
           onClick={toggleBookmark}
           className={`flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-black/10 dark:hover:bg-white/10 ${bookmarked ? "text-amber-400" : "text-neutral-500 dark:text-neutral-400"}`}
@@ -842,19 +1045,53 @@ export default function SafariApp({ win }: AppProps) {
             ) : (
               <>
                 <iframe
+                  key={`${t.id}|d${t.direct ? 1 : 0}|f${t.fNonce ?? 0}`}
                   ref={(el) => {
                     if (el) iframeRefs.current.set(t.id, el);
                     else iframeRefs.current.delete(t.id);
                   }}
                   title={t.title}
-                  src="about:blank"
+                  src={t.direct ? t.url : "about:blank"}
                   className="h-full w-full border-0 bg-white"
                   allow="fullscreen; autoplay; encrypted-media; picture-in-picture; clipboard-write; gamepad"
                   onLoad={() => {
-                    hangRef.current.delete(t.id); // la página cargó: reinicio del watchdog
+                    const cur = tabsRef.current.find((x) => x.id === t.id);
+                    if (cur?.direct) {
+                      // modo directo: el iframe real cargó (o el propio navegador mostró su rechazo)
+                      hangRef.current.delete(t.id);
+                      patchTab(t.id, { loading: false, error: undefined });
+                      // memorizar solo si sigue puesta ≥8 s (evita guardar páginas de rechazo)
+                      const host = hostOf(t.url);
+                      setTimeout(() => {
+                        const later = tabsRef.current.find((x) => x.id === t.id);
+                        if (later && later.direct && later.url === t.url && !later.loading && !later.error) rememberDirectOk(host);
+                      }, 8000);
+                      return;
+                    }
+                    // modo motor: ¿página de error del servidor? → la escalera sigue al siguiente escalón
+                    let doc: Document | null | null = null;
+                    try {
+                      doc = iframeRefs.current.get(t.id)?.contentDocument ?? null;
+                    } catch {
+                      doc = null;
+                    }
+                    if (looksLikeErrorPage(doc)) {
+                      const h = hangRef.current.get(t.id);
+                      if (h) {
+                        const next = h.queue.shift();
+                        if (!next || next === "error") {
+                          void runPhase(t, "error", []);
+                        } else {
+                          void runPhase(t, next, h.queue);
+                        }
+                        return; // NO marcar como cargada: no lo es
+                      }
+                    }
+                    hangRef.current.delete(t.id); // la página cargó: escalera completada
                     patchTab(t.id, { loading: false, error: undefined });
                     readPageMeta(t.id);
                     attachClickCapture(t.id);
+                    unlockRootScroll(t.id);
                   }}
                 />
                 {t.error && (

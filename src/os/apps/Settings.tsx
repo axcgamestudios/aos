@@ -18,6 +18,7 @@ import {
   type EngineDiagnostics,
 } from "../engine/scramjet";
 import { getAccount, onAccount, type AosIdProfile } from "../services/account";
+import { checkEmailCode, getAxcid, markEmailVerified, sendEmailCode, type AxcidEntry } from "../services/axcid";
 type Pane = "appearance" | "wallpaper" | "dock" | "browser" | "account" | "general";
 
 const PANES: { id: Pane; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
@@ -366,6 +367,179 @@ export default function SettingsApp({ win }: AppProps) {
 }
 
 /* ================= panel Cuenta ================= */
+
+/* AXC ID: correo verificado → sesión persistente con cookie + entrada por código */
+function AxcIdCard() {
+  const session = useOS((s) => s.session);
+  const logout = useOS((s) => s.logout);
+  const notify = useOS((s) => s.notify);
+  const [entry, setEntry] = useState<AxcidEntry | null>(null);
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const reload = () => {
+    if (!session) return;
+    const e = getAxcid(session.accountId);
+    setEntry(e);
+    setEmail(e?.email ?? "");
+  };
+  useEffect(() => {
+    reload();
+    setSent(false);
+    setCode("");
+    setMsg("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.accountId]);
+
+  if (!session) {
+    return (
+      <Card title="AXC ID · correo">
+        <Row>
+          <div className="min-w-0 flex-1">
+            <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Sin sesión iniciada</p>
+            <p className="text-[10.5px] text-neutral-400">Inicia sesión con tu cuenta para gestionar tu correo AXC ID.</p>
+          </div>
+        </Row>
+      </Card>
+    );
+  }
+
+  const send = async () => {
+    if (busy) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await sendEmailCode(email);
+      setMsg(r.detail);
+      if (r.sent) setSent(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verify = async () => {
+    if (busy) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const c = await checkEmailCode(code);
+      if (!c.ok) {
+        setMsg(c.detail ?? "Código incorrecto.");
+        return;
+      }
+      markEmailVerified(session.accountId, c.email ?? email);
+      reload();
+      setSent(false);
+      setCode("");
+      notify("settings", "Correo verificado", "Ya puedes entrar con un código a ese correo, sin contraseña.");
+      setMsg("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card title="AXC ID · acceso sin contraseña">
+      <Row>
+        <div className="min-w-0 flex-1">
+          <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">
+            Correo de la cuenta «{session.username}»
+          </p>
+          <p className="mt-0.5 text-[10.5px] leading-relaxed text-neutral-400">
+            {entry?.verified
+              ? "Verificado ✓ — puedes entrar desde la pantalla de inicio solo con un código a este correo, sin contraseña."
+              : "Añade tu correo y verifícalo con el código que te llega: podrás entrar sin contraseña con un código a ese correo. «Recordarme» en la pantalla de inicio funciona igual, con o sin correo."}
+          </p>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setMsg("");
+              }}
+              disabled={entry?.verified || sent}
+              placeholder="tu correo"
+              type="email"
+              className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 disabled:opacity-70 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
+            />
+            {!entry?.verified &&
+              (sent ? (
+                <button
+                  onClick={() => void verify()}
+                  disabled={busy || code.length < 6}
+                  className="shrink-0 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                >
+                  Verificar
+                </button>
+              ) : (
+                <button
+                  onClick={() => void send()}
+                  disabled={busy || !email.includes("@")}
+                  className="shrink-0 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                >
+                  {busy ? "Enviando…" : "Enviar código"}
+                </button>
+              ))}
+          </div>
+          {sent && !entry?.verified && (
+            <div className="mt-2 flex gap-2">
+              <input
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                  setMsg("");
+                }}
+                placeholder="código de 6 dígitos"
+                inputMode="numeric"
+                className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] tracking-[0.3em] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
+              />
+              <button
+                onClick={() => {
+                  setSent(false);
+                  setCode("");
+                  setMsg("");
+                }}
+                className="shrink-0 rounded-md border border-black/10 px-3 py-1.5 text-[11px] font-medium text-neutral-600 transition hover:bg-black/5 dark:border-white/15 dark:text-neutral-300 dark:hover:bg-white/10"
+              >
+                Reenviar
+              </button>
+            </div>
+          )}
+          {msg && <p className="mt-2 text-[10.5px] leading-relaxed text-amber-600 dark:text-amber-400">{msg}</p>}
+          {entry?.verified && (
+            <p className="mt-1.5 text-[10px] text-neutral-400">
+              El envío usa FormSubmit (gratuito, sin servidor). La primera vez te pedirá activar su enlace desde tu correo;
+              si el envío falla, el servicio puede estar ocupado — inténtalo de nuevo.
+            </p>
+          )}
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+            entry?.verified ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-black/5 text-neutral-400 dark:bg-white/10"
+          }`}
+        >
+          {entry?.verified ? "verificado" : "sin verificar"}
+        </span>
+      </Row>
+      <Row>
+        <div className="min-w-0">
+          <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Sesión en este dispositivo</p>
+          <p className="text-[10.5px] text-neutral-400">Al cerrar sesión se borra la cookie recordada y volverá a pedirse la contraseña.</p>
+        </div>
+        <button
+          onClick={() => logout()}
+          className="shrink-0 rounded-md border border-black/10 px-3 py-1.5 text-[11px] font-medium text-neutral-600 transition hover:bg-black/5 dark:border-white/15 dark:text-neutral-300 dark:hover:bg-white/10"
+        >
+          Cerrar sesión
+        </button>
+      </Row>
+    </Card>
+  );
+}
+
 function AccountPane() {
   const settings = useOS((s) => s.settings);
   const update = useOS((s) => s.updateSettings);
@@ -476,6 +650,7 @@ function AccountPane() {
           </Row>
         )}
       </Card>
+      <AxcIdCard />
       <Card title="Cómo funciona tu cuenta">
         <div className="px-4 py-3 text-[10.5px] leading-relaxed text-neutral-500 dark:text-neutral-400">
           El axcsOS ID vive en este dispositivo: se genera un par de claves <b>ECDH P-256</b> y tu <b>@id</b> se deriva de la

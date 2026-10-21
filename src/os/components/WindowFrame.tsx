@@ -89,6 +89,30 @@ export default function WindowFrame({
   const resize = useRef<ResizeState | null>(null);
   const [dragging, setDragging] = useState(false);
   const frameRef = useRef<HTMLDivElement>(null);
+  const [isFs, setIsFs] = useState(false);
+
+  /* ---- pantalla completa 100% (API nativa del navegador) ----
+     El botón verde lleva la ventana a pantalla TOTAL del dispositivo:
+     cubre barra de menú, dock y el propio navegador. Esc o el botón
+     verde de nuevo devuelven la ventana a su tamaño anterior. */
+  useEffect(() => {
+    const onFsChange = () => setIsFs(document.fullscreenElement === frameRef.current);
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  const toggleNativeFullscreen = async () => {
+    try {
+      if (document.fullscreenElement === frameRef.current) {
+        await document.exitFullscreen();
+      } else {
+        await frameRef.current?.requestFullscreen();
+      }
+    } catch {
+      // navegadores que lo bloqueen: comportamiento clásico de zoom
+      zoomWindow(win.id);
+    }
+  };
 
   const minW = def?.minSize?.w ?? 300;
   const minH = def?.minSize?.h ?? 200;
@@ -204,9 +228,9 @@ export default function WindowFrame({
       onPointerDown={() => !active && focusWindow(win.id)}
     >
       <div
-        className={`flex h-full w-full flex-col overflow-hidden rounded-xl bg-white dark:bg-[#1e1e21] ${
-          active ? "win-shadow" : "win-shadow-inactive"
-        } ${dragging ? "cursor-grabbing" : ""}`}
+        className={`flex h-full w-full flex-col overflow-hidden bg-white dark:bg-[#1e1e21] ${
+          isFs ? "rounded-none" : "rounded-xl"
+        } ${active || isFs ? "win-shadow" : "win-shadow-inactive"} ${dragging ? "cursor-grabbing" : ""}`}
       >
         {/* title bar */}
         <div
@@ -239,8 +263,8 @@ export default function WindowFrame({
             <TrafficLight
               color="#28c840"
               inactive={!active}
-              onClick={() => zoomWindow(win.id)}
-              label="Ampliar"
+              onClick={() => void toggleNativeFullscreen()}
+              label={isFs ? "Salir de pantalla completa" : "Pantalla completa"}
               glyph={ZoomGlyph}
             />
           </div>
@@ -262,7 +286,7 @@ export default function WindowFrame({
       </div>
 
       {/* resize handles */}
-      {!win.maximized &&
+      {!win.maximized && !isFs &&
         handles.map(([mode, cls]) => (
           <div
             key={mode}
