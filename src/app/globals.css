@@ -150,8 +150,8 @@
 /* Base liquid glass material (light) */
 .glass {
   background: color-mix(in srgb, rgb(255 255 255 / 0.62), transparent);
-  backdrop-filter: blur(22px) saturate(180%);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-satur, 180%));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-satur, 180%));
   box-shadow:
     inset 0 0 0 0.5px rgb(255 255 255 / 0.55),
     inset 0 1px 0 0.5px rgb(255 255 255 / 0.65),
@@ -162,8 +162,8 @@
 /* Liquid glass (dark) */
 .glass-dark {
   background: color-mix(in srgb, rgb(24 24 27 / 0.58), transparent);
-  backdrop-filter: blur(22px) saturate(180%);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-satur, 180%));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-satur, 180%));
   box-shadow:
     inset 0 0 0 0.5px rgb(255 255 255 / 0.14),
     inset 0 1px 0 0.5px rgb(255 255 255 / 0.22),
@@ -174,16 +174,16 @@
 /* Thin glass for menubar / dock chrome that sits on wallpaper */
 .glass-chrome {
   background: color-mix(in srgb, rgb(255 255 255 / 0.42), transparent);
-  backdrop-filter: blur(28px) saturate(190%);
-  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  backdrop-filter: blur(calc(var(--glass-blur, 22px) + 6px)) saturate(var(--glass-satur, 190%));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur, 22px) + 6px)) saturate(var(--glass-satur, 190%));
   box-shadow: inset 0 0.5px 0 rgb(255 255 255 / 0.5);
 }
 
 .dark .glass-chrome,
 .glass-chrome-dark {
   background: color-mix(in srgb, rgb(18 18 21 / 0.42), transparent);
-  backdrop-filter: blur(28px) saturate(190%);
-  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  backdrop-filter: blur(calc(var(--glass-blur, 22px) + 6px)) saturate(var(--glass-satur, 190%));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur, 22px) + 6px)) saturate(var(--glass-satur, 190%));
   box-shadow: inset 0 0.5px 0 rgb(255 255 255 / 0.16);
 }
 
@@ -281,7 +281,7 @@
   }
 }
 .animate-dock-bounce {
-  animation: dock-bounce 0.9s cubic-bezier(0.32, 0.72, 0, 1) 2;
+  animation: dock-bounce calc(0.9s * var(--anim-mult, 1)) cubic-bezier(0.32, 0.72, 0, 1) 2;
 }
 
 @keyframes win-open {
@@ -295,7 +295,7 @@
   }
 }
 .animate-win-open {
-  animation: win-open 0.32s var(--ease-mac);
+  animation: win-open calc(0.32s * var(--anim-mult, 1)) var(--ease-mac);
 }
 
 @keyframes fade-in {
@@ -307,7 +307,7 @@
   }
 }
 .animate-fade-in {
-  animation: fade-in 0.35s ease-out;
+  animation: fade-in calc(0.35s * var(--anim-mult, 1)) ease-out;
 }
 
 @keyframes pop-in {
@@ -321,7 +321,7 @@
   }
 }
 .animate-pop-in {
-  animation: pop-in 0.22s var(--ease-mac);
+  animation: pop-in calc(0.22s * var(--anim-mult, 1)) var(--ease-mac);
 }
 
 @keyframes shake-x {
@@ -339,7 +339,7 @@
   }
 }
 .animate-shake {
-  animation: shake-x 0.45s ease-in-out;
+  animation: shake-x calc(0.45s * var(--anim-mult, 1)) ease-in-out;
 }
 
 @keyframes spotlight-in {
@@ -353,7 +353,7 @@
   }
 }
 .animate-spotlight {
-  animation: spotlight-in 0.24s var(--ease-mac);
+  animation: spotlight-in calc(0.24s * var(--anim-mult, 1)) var(--ease-mac);
 }
 
 @keyframes progress-indeterminate {

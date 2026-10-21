@@ -20,13 +20,24 @@ export default function Page() {
   const appearance = useOS((s) => s.settings.appearance);
   const accent = useOS((s) => s.settings.accent);
   const brightness = useOS((s) => s.sys.brightness);
+  const glassIntensity = useOS((s) => s.settings.glassIntensity);
+  const animSpeed = useOS((s) => s.settings.animSpeed);
+  const reduceTransparency = useOS((s) => s.settings.reduceTransparency);
 
-  /* apply theme + accent */
+  /* apply theme + accent + liquid glass tuning */
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", appearance === "dark");
     root.style.setProperty("--accent-os", accent);
-  }, [appearance, accent]);
+    // intensidad de desenfoque Liquid Glass: 0–100 → 0–34px (0 = opaco)
+    const blur = reduceTransparency ? 0 : Math.round((glassIntensity / 100) * 34);
+    root.style.setProperty("--glass-blur", `${blur}px`);
+    const satur = reduceTransparency ? 100 : 120 + Math.round((glassIntensity / 100) * 90);
+    root.style.setProperty("--glass-satur", `${satur}%`);
+    // velocidad de animaciones: multiplicador global
+    const mult = animSpeed === "slow" ? 1.6 : animSpeed === "fast" ? 0.6 : 1;
+    root.style.setProperty("--anim-mult", String(mult));
+  }, [appearance, accent, glassIntensity, animSpeed, reduceTransparency]);
 
   /* global keyboard shortcuts */
   useEffect(() => {

@@ -186,6 +186,8 @@ export const useOS = create<OsStore>()(
         dockMagnify: true,
         reduceTransparency: false,
         userName: "Usuario",
+        glassIntensity: 65,
+        animSpeed: "normal",
       },
       sys: {
         volume: 65,

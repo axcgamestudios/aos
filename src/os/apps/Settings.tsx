@@ -1,11 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Globe, Info, Monitor, Palette, Sun, Moon, Upload, User, Search as SearchIcon, ShieldCheck } from "lucide-react";
+import { Check, Globe, Info, Monitor, Palette, Sun, Moon, Upload, User, Search as SearchIcon, ShieldCheck, LogOut, LogIn } from "lucide-react";
 import type { AppProps } from "../types";
 import { useOS } from "../store";
 import { ACCENTS, CUSTOM_WALLPAPER_ID, WALLPAPERS } from "../wallpapers";
 import { PearLogo } from "../icons";
+import {
+  checkBackend,
+  getBackendUrl,
+  login as apiLoginFn,
+  logout as apiLogoutFn,
+  me as apiMeFn,
+  register as apiRegisterFn,
+  setBackendUrl,
+  setToken,
+} from "../services/backend";
 import {
   BAREMUX_VERSION,
   DEMO_WISP,
@@ -17,13 +27,14 @@ import {
   testWisp,
   type EngineDiagnostics,
 } from "../engine/scramjet";
-type Pane = "appearance" | "wallpaper" | "dock" | "browser" | "general";
+type Pane = "appearance" | "wallpaper" | "dock" | "browser" | "account" | "general";
 
 const PANES: { id: Pane; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
   { id: "appearance", label: "Apariencia", icon: Palette },
   { id: "wallpaper", label: "Fondo de pantalla", icon: Monitor },
   { id: "dock", label: "Dock y barra de menús", icon: Sun },
   { id: "browser", label: "Navegador", icon: Globe },
+  { id: "account", label: "Cuenta", icon: User },
   { id: "general", label: "General", icon: Info },
 ];
 
@@ -174,6 +185,37 @@ export default function SettingsApp({ win }: AppProps) {
                 </div>
                 <Toggle checked={settings.reduceTransparency} onChange={(v) => update({ reduceTransparency: v })} />
               </Row>
+              <Row>
+                <div className="min-w-0">
+                  <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Intensidad del desenfoque</p>
+                  <p className="text-[10.5px] text-neutral-400">Cuánto difumina el Liquid Glass ({settings.glassIntensity}%)</p>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={settings.glassIntensity}
+                  onChange={(e) => update({ glassIntensity: Number(e.target.value) })}
+                  className="w-40 accent-[var(--accent-os)]"
+                />
+              </Row>
+              <Row>
+                <div>
+                  <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Velocidad de animaciones</p>
+                  <p className="text-[10.5px] text-neutral-400">Aplica a ventanas, Dock y paneles del sistema</p>
+                </div>
+                <div className="flex gap-2">
+                  {(
+                    [
+                      { id: "slow", label: "Lenta" },
+                      { id: "normal", label: "Normal" },
+                      { id: "fast", label: "Rápida" },
+                    ] as const
+                  ).map((m) => (
+                    <ChoiceButton key={m.id} active={settings.animSpeed === m.id} onClick={() => update({ animSpeed: m.id })} label={m.label} />
+                  ))}
+                </div>
+              </Row>
             </Card>
           </>
         )}
@@ -258,6 +300,8 @@ export default function SettingsApp({ win }: AppProps) {
 
         {pane === "browser" && <BrowserPane />}
 
+        {pane === "account" && <AccountPane />}
+
         {pane === "general" && (
           <>
             <Card title="Perfil">
@@ -327,6 +371,149 @@ export default function SettingsApp({ win }: AppProps) {
         )}
       </div>
     </div>
+  );
+}
+
+/* ================= panel Cuenta ================= */
+function AccountPane() {
+  const settings = useOS((s) => s.settings);
+  const update = useOS((s) => s.updateSettings);
+  const notify = useOS((s) => s.notify);
+  const openApp = useOS((s) => s.openApp);
+  const [url, setUrl] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState<{ ok: boolean; detail: string } | null>(null);
+  const [user, setUser] = useState<{ username: string; displayName: string } | null>(null);
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [form, setForm] = useState({ username: "", password: "", displayName: "" });
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    setUrl(getBackendUrl());
+    checkBackend().then(setStatus);
+    if (getBackendUrl()) {
+      apiMeFn()
+        .then((r) => setUser(r.user))
+        .catch(() => setUser(null));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const apply = async () => {
+    setChecking(true);
+    setStatus(null);
+    setBackendUrl(url);
+    const r = await checkBackend(url);
+    setStatus(r);
+    setChecking(false);
+    if (r.ok) {
+      apiMeFn()
+        .then((m) => setUser(m.user))
+        .catch(() => setUser(null));
+    }
+  };
+
+  const doAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr("");
+    try {
+      const r = mode === "login" ? await apiLoginFn(form.username, form.password) : await apiRegisterFn(form.username, form.password, form.displayName || form.username);
+      setUser(r.user);
+      update({ userName: r.user.displayName, ...(r.user.avatar ? { avatar: r.user.avatar } : {}) });
+      notify("settings", "Cuenta axcsOS", `Sesión iniciada como ${r.user.displayName}`);
+    } catch (e2) {
+      setErr(String((e2 as Error).message ?? e2));
+    }
+  };
+
+  const doLogout = async () => {
+    try { await apiLogoutFn(); } catch { /* el token caduca solo */ }
+    setToken("");
+    setUser(null);
+    notify("settings", "Cuenta axcsOS", "Sesión cerrada");
+  };
+
+  return (
+    <>
+      <Card title="Cuenta axcsOS">
+        <Row>
+          <div className="min-w-0">
+            <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Estado</p>
+            <p className="text-[10.5px] leading-relaxed text-neutral-400">
+              Cuenta propia del sistema (no es Apple ID ni un servicio de terceros). Registro, sesión y mensajería
+              persisten en TU servidor. Sin backend configurado, el sistema funciona en modo local.
+            </p>
+          </div>
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${user ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : status?.ok ? "bg-amber-500/15 text-amber-600" : "bg-neutral-500/15 text-neutral-500"}`}>
+            {user ? `@${user.username}` : status?.ok ? "Backend listo, sin sesión" : "Modo local"}
+          </span>
+        </Row>
+        <Row>
+          <div className="min-w-0 flex-1">
+            <p className="text-[12.5px] text-neutral-700 dark:text-neutral-200">Servidor de cuentas y mensajería</p>
+            <p className="mb-2 text-[10.5px] leading-relaxed text-neutral-400">
+              Despliega <code>server/aos-backend.mjs</code> (Node 18+, sin dependencias) y pon aquí su URL.
+            </p>
+            <div className="flex gap-2">
+              <input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                spellCheck={false}
+                placeholder="https://mi-backend.example.com"
+                className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] text-neutral-700 outline-none focus:ring-2 focus:ring-[var(--accent-os)]/40 dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100"
+              />
+              <button onClick={apply} disabled={checking} className="shrink-0 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+                {checking ? "…" : "Conectar"}
+              </button>
+            </div>
+            {status && <p className={`mt-1.5 text-[10.5px] ${status.ok ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600"}`}>{status.ok ? "✓ " : "⚠ "}{status.detail}</p>}
+          </div>
+        </Row>
+        {status?.ok && (
+          <Row>
+            {user ? (
+              <div className="flex w-full min-w-0 items-center gap-3">
+                {settings.avatar ? <img src={settings.avatar} alt="" className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-fuchsia-400 text-[13px] font-bold text-white">{user.displayName[0]}</div>}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12.5px] font-medium text-neutral-800 dark:text-neutral-100">{user.displayName}</p>
+                  <p className="truncate text-[10px] text-neutral-400">@{user.username} · sincronizado con el perfil del sistema</p>
+                </div>
+                <button onClick={doLogout} className="flex shrink-0 items-center gap-1 rounded-md border border-black/10 px-2.5 py-1 text-[11px] font-medium text-neutral-600 transition hover:bg-black/5 dark:border-white/15 dark:text-neutral-300 dark:hover:bg-white/10">
+                  <LogOut size={11} /> Cerrar sesión
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={doAuth} className="w-full min-w-0">
+                <div className="mb-2 flex gap-2">
+                  {mode === "register" && (
+                    <input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder="Nombre visible" className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="Usuario" autoComplete="username" className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
+                  <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} type="password" placeholder="Contraseña" className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[11.5px] dark:border-white/15 dark:bg-neutral-800 dark:text-neutral-100" />
+                  <button type="submit" className="flex shrink-0 items-center gap-1 rounded-md bg-[var(--accent-os)] px-3 py-1.5 text-[11px] font-semibold text-white">
+                    <LogIn size={11} /> {mode === "login" ? "Entrar" : "Crear"}
+                  </button>
+                </div>
+                {err && <p className="mt-1.5 text-[10.5px] text-rose-500">{err}</p>}
+                <button type="button" onClick={() => setMode(mode === "login" ? "register" : "login")} className="mt-1.5 text-[10.5px] text-[var(--accent-os)] underline">
+                  {mode === "login" ? "Crear una cuenta nueva" : "Ya tengo cuenta"}
+                </button>
+              </form>
+            )}
+          </Row>
+        )}
+      </Card>
+      <Card title="Seguridad">
+        <div className="px-4 py-3 text-[10.5px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+          Las contraseñas se guardan con <b>scrypt + salt</b> en el servidor, nunca en texto plano ni en este
+          dispositivo. La sesión usa un token Bearer (equivalente a una cookie de sesión) y caduca a los 30 días.
+          Ningún usuario puede leer conversaciones ajenas: el backend comprueba el acceso en cada petición.
+          La mensajería requiere backend propio por diseño: GitHub Pages es estático.
+        </div>
+      </Card>
+    </>
   );
 }
 

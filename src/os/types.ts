@@ -106,6 +106,10 @@ export interface OsSettings {
   dockMagnify: boolean;
   reduceTransparency: boolean;
   userName: string;
+  /** intensidad del desenfoque Liquid Glass (0-100) */
+  glassIntensity: number;
+  /** velocidad de animaciones del sistema */
+  animSpeed: "slow" | "normal" | "fast";
   /** avatar del usuario como dataURL (imagen subida, opcional) */
   avatar?: string;
   /** fondo personalizado como dataURL (imagen subida, opcional) */

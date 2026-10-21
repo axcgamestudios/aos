@@ -494,3 +494,21 @@ export const SafariLogoIcon = imgIcon("icons/safari.png");
 export const NotesLogoIcon = imgIcon("icons/notes.png");
 export const CalculatorLogoIcon = imgIcon("icons/calculator.jpg");
 export const SettingsLogoIcon = imgIcon("icons/settings.png");
+
+export const MessagesIcon: IconType = ({ className }) => (
+  <svg viewBox="0 0 64 64" className={className} aria-hidden>
+    <defs>
+      <linearGradient id="msgG" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#5eead4" />
+        <stop offset="1" stopColor="#0ea5e9" />
+      </linearGradient>
+    </defs>
+    <rect x="4" y="8" width="56" height="42" rx="14" fill="url(#msgG)" />
+    <path d="M20 50 L16 62 L30 52 Z" fill="#0ea5e9" />
+    <g fill="#fff">
+      <circle cx="22" cy="29" r="4" />
+      <circle cx="32" cy="29" r="4" />
+      <circle cx="42" cy="29" r="4" />
+    </g>
+  </svg>
+);
