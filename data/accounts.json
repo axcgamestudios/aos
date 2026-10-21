@@ -3,13 +3,6 @@
   "version": 1,
   "accounts": [
     {
-      "id": "acc-elcostinero",
-      "username": "elcostinero",
-      "salt": "qemRkihBXy7y/N8H57TBuQ==",
-      "hash": "LiiiGytVkqga5IoqWuWuIqOYQA8jXX3TiZ/IpnttCGE=",
-      "created": "2026-10-21T18:57:17.972Z"
-    },
-    {
       "id": "acc-mvihjo8slmy1e",
       "username": "probatest",
       "salt": "b4D6uihfEQuBFVR7jU6arA==",
