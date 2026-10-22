@@ -228,3 +228,20 @@ Stage Summary:
 - Para que el OTP llegue desde cualquier servidor: añadir RESEND_API_KEY (y opcional RESEND_FROM) al despliegue con servidor; sin clave, FormSubmit desde la IP del usuario funciona como respaldo.
 - Pendiente de usuario: activar el deploy por GitHub Actions (2 minutos, instrucciones en download/DEPLOY-LEEME.md) o empujar el bundle; tras eso, cada push a main se publica solo y este entorno ya no necesita credenciales de push.
 - Evidencias: scripts/shots/otp-e2e-01…12. Scripts reutilizables: scripts/e2e-otp-seed.mjs, scripts/build-pages.mjs (aparta/restaura src/app/api para el export estático).
+---
+Task ID: 11
+Agent: main (Z.ai)
+Task: Publicar todo el trabajo pendiente en GitHub Pages (main + gh-pages) con el token entregado por el usuario
+
+Work Log:
+- Token PAT del usuario verificado con fetch (acceso push a axcgamestudios/aos); usado SOLO en URLs de un solo uso (nunca incrustado en la configuración del remote — lección del incidente de la tarea 10).
+- main empujado d733178..ea1c587: los 4 commits que quedaron pendientes tras la pérdida de credenciales — workflow de Actions (9674738), bundle+instrucciones de despliegue (7729b7e), evidencia E2E (a2d8674) y worklog tarea 10 (ea1c587).
+- build:pages OK (export estático, src/app/api apartada y restaurada automáticamente). Código de la tarea 10 confirmado en el bundle: chunk cbcc8f86ad816e3b.js con axcsos-vault/AES/PBKDF2 y cadenas del autocompletado ("usa el tuyo", "Solo rellenar", "Tienes una cuenta guardada") y de Ajustes ("Contraseñas y autocompletado", "Sesiones ligadas a la cuenta"). El dev server del entorno quedó sano (200 tras el build).
+- Deploy a gh-pages con el patrón seguro post-incidente: rama local realineada a origin/gh-pages, worktree AISLADO .deploy-gh, rsync --delete EXCLUYENDO .git, data/accounts.json y .nojekyll (re-tocado después; sin él Jekyll no publica _next/). Commit 7312ab1, push 9c6a801..7312ab1.
+- VERIFICADO EN VIVO (agent-browser contra https://axcgamestudios.github.io/aos/): nuevo chunk sirviendo 200 con las marcas de bóveda+autocompletado ~30 s tras el push; home 200; arranque del OS con pantalla de acceso y 0 errores de consola; flujo AXC ID NUEVO en vivo: "Entrar con correo y código (AXC ID)" → "tu correo verificado" + "Enviarme el código por correo" (en Pages estático el OTP usa el respaldo local/FormSubmit desde el navegador del usuario, por diseño); data/accounts.json del sitio PRESERVADO con las cuentas gestionadas por el panel (adan, california, elcostinero, ilogoa).
+- Evidencias: scripts/shots/deploy11-live-axcid.png (login con entrada AXC ID) y deploy11-live-axcid-flow.png (flujo OTP en vivo).
+
+Stage Summary:
+- https://axcgamestudios.github.io/aos/ ya sirve TODO: Mail axcsOS + instalar página como app + App Store (tarea 9) y AXC ID con OTP + bóveda AES-256 + autocompletado + sesiones por perfil (tarea 10).
+- main y gh-pages en GitHub al día. El workflow .github/workflows/deploy-pages.yml queda en main como vía alternativa (si el usuario activa Pages → GitHub Actions, cada push a main se publicará solo).
+- Para OTP con Resend en un despliegue con servidor Node (Render/Vercel/propio): añadir RESEND_API_KEY; en Pages, el respaldo FormSubmit parte desde la IP del usuario y funciona desde navegadores residenciales.
