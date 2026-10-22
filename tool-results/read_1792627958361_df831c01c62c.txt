@@ -1,0 +1,594 @@
+    30→   879→                  role="button"
+    31→   880→                  tabIndex={-1}
+    32→   881→                  onClick={(e) => {
+    33→   882→                    e.stopPropagation();
+    34→   883→                    closeTab(t.id);
+    35→   884→                  }}
+    36→   885→                  className="shrink-0 rounded p-0.5 opacity-0 transition hover:bg-black/10 dark:hover:bg-white/20 group-hover:opacity-100"
+    37→   886→                >
+    38→   887→                  <X size={10} />
+    39→   888→                </span>
+    40→   889→              )}
+    41→   890→            </button>
+    42→   891→          ))}
+    43→   892→          <button
+    44→   893→            onClick={newTab}
+    45→   894→            className="mb-0.5 flex h-6 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition hover:bg-black/8 dark:text-neutral-400 dark:hover:bg-white/10"
+    46→   895→            title="Nueva pestaña (⌘T)"
+    47→   896→          >
+    48→   897→            <Plus size={13} />
+    49→   898→          </button>
+    50→   899→        </div>
+    51→   900→        <div className="flex items-center gap-0.5 pb-1">
+    52→   901→          <button
+    53→   902→            onClick={() => setPanel(panel === "bookmarks" ? null : "bookmarks")}
+    54→   903→            className={`flex h-6 w-7 items-center justify-center rounded-md transition hover:bg-black/8 dark:hover:bg-white/10 ${panel === "bookmarks" ? "text-[var(--accent-os)]" : "text-neutral-500 dark:text-neutral-400"}`}
+    55→   904→            title="Marcadores"
+    56→   905→          >
+    57→   906→            <BookMarked size={13} />
+    58→   907→          </button>
+    59→   908→          <button
+    60→   909→            onClick={() => setPanel(panel === "history" ? null : "history")}
+    61→   910→            className={`flex h-6 w-7 items-center justify-center rounded-md transition hover:bg-black/8 dark:hover:bg-white/10 ${panel === "history" ? "text-[var(--accent-os)]" : "text-neutral-500 dark:text-neutral-400"}`}
+    62→   911→            title="Historial"
+    63→   912→          >
+    64→   913→            <HistoryIcon size={13} />
+    65→   914→          </button>
+    66→   915→        </div>
+    67→   916→      </div>
+    68→   917→
+    69→   918→      {/* toolbar */}
+    70→   919→      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-black/8 bg-neutral-100/80 px-3 backdrop-blur-xl dark:border-white/8 dark:bg-neutral-900/80">
+    71→   920→        <button onClick={() => cmd("back")} className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-black/10 disabled:opacity-30 dark:text-neutral-300 dark:hover:bg-white/10" title="Atrás" disabled={!activeTabData || activeTabData.hIndex <= 0}>
+    72→   921→          <ArrowLeft size={15} />
+    73→   922→        </button>
+    74→   923→        <button onClick={() => cmd("forward")} className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-black/10 disabled:opacity-30 dark:text-neutral-300 dark:hover:bg-white/10" title="Adelante" disabled={!activeTabData || activeTabData.hIndex >= activeTabData.history.length - 1}>
+    75→   924→          <ArrowRight size={15} />
+    76→   925→        </button>
+    77→   926→        <button onClick={() => cmd("reload")} className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-black/10 disabled:opacity-30 dark:text-neutral-300 dark:hover:bg-white/10" title="Recargar" disabled={showStart || showSearch}>
+    78→   927→          <RotateCw size={13} className={activeTabData?.loading ? "animate-spin" : ""} />
+    79→   928→        </button>
+    80→   929→        {activeTabData?.loading ? (
+    81→   930→          <button onClick={() => cmd("stop")} className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-black/10 dark:text-neutral-300 dark:hover:bg-white/10" title="Detener carga">
+    82→   931→            <XCircle size={13} />
+    83→   932→          </button>
+    84→   933→        ) : (
+    85→   934→          <button
+    86→   935→            onClick={() => tabId && navigateTab(tabId, START)}
+    87→   936→            className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-black/10 dark:text-neutral-300 dark:hover:bg-white/10"
+    88→   937→            title="Página de inicio"
+    89→   938→          >
+    90→   939→            <Home size={14} />
+    91→   940→          </button>
+    92→   941→        )}
+    93→   942→        <form
+    94→   943→          className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-lg bg-black/5 px-3 focus-within:ring-2 focus-within:ring-[var(--accent-os)]/50 dark:bg-white/10"
+    95→   944→          onSubmit={(e) => {
+    96→   945→            e.preventDefault();
+    97→   946→            submitAddress();
+    98→   947→          }}
+    99→   948→        >
+   100→   949→          {showStart || showSearch ? <Search size={12} className="shrink-0 text-neutral-400" /> : <Lock size={11} className="shrink-0 text-emerald-500" />}
+   101→   950→          <input
+   102→   951→            value={address}
+   103→   952→            onChange={(e) => setAddress(e.target.value)}
+   104→   953→            placeholder="Buscar en la web o escribir dirección (URL)"
+   105→   954→            spellCheck={false}
+   106→   955→            className="os-input h-full w-full bg-transparent text-[12px] text-neutral-700 outline-none placeholder:text-neutral-400 dark:text-neutral-200"
+   107→   956→          />
+   108→   957→          {address && (
+   109→   958→            <button type="button" onClick={() => setAddress("")} className="shrink-0 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200">
+   110→   959→              <X size={11} />
+   111→   960→            </button>
+   112→   961→          )}
+   113→   962→        </form>
+   114→   963→        {activeTabData?.direct && (
+   115→   964→          <span
+   116→   965→            className="flex h-[18px] shrink-0 items-center rounded-full bg-sky-500/15 px-2 text-[9.5px] font-semibold text-sky-600 dark:text-sky-400"
+   117→   966→            title="Esta pestaña usa conexión directa (tu IP), sin motor: la usan los sitios que bloquean la IP de los motores pero permiten mostrarse aquí."
+   118→   967→          >
+   119→   968→            directa
+   120→   969→          </span>
+   121→   970→        )}
+   122→   971→        <button
+   123→   972→          onClick={toggleBookmark}
+   124→   973→          className={`flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-black/10 dark:hover:bg-white/10 ${bookmarked ? "text-amber-400" : "text-neutral-500 dark:text-neutral-400"}`}
+   125→   974→          title={bookmarked ? "Quitar marcador" : "Añadir marcador"}
+   126→   975→        >
+   127→   976→          <Star size={14} fill={bookmarked ? "currentColor" : "none"} />
+   128→   977→        </button>
+   129→   978→        <button
+   130→   979→          onClick={() => openApp("downloads")}
+   131→   980→          className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-black/10 dark:text-neutral-400 dark:hover:bg-white/10"
+   132→   981→          title="Descargas"
+   133→   982→        >
+   134→   983→          <DownloadIcon size={13} />
+   135→   984→        </button>
+   136→   985→      </div>
+   137→   986→
+   138→   987→      {activeTabData?.loading && (
+   139→   988→        <div className="h-0.5 shrink-0 overflow-hidden bg-transparent">
+   140→   989→          <div className="animate-progress h-full w-1/3 rounded-full bg-[var(--accent-os)]" />
+   141→   990→        </div>
+   142→   991→      )}
+   143→   992→
+   144→   993→      {/* paneles laterales: marcadores / historial */}
+   145→   994→      {panel && (
+   146→   995→        <SidePanel
+   147→   996→          kind={panel}
+   148→   997→          bookmarks={bookmarks}
+   149→   998→          history={safariHistory}
+   150→   999→          onOpen={(url) => {
+   151→  1000→            tabId && void navigateTab(tabId, url);
+   152→  1001→            setPanel(null);
+   153→  1002→          }}
+   154→  1003→          onRemoveBookmark={removeBookmark}
+   155→  1004→          onRemoveHistory={removeHistory}
+   156→  1005→          onClearHistory={clearHistory}
+   157→  1006→          onClose={() => setPanel(null)}
+   158→  1007→        />
+   159→  1008→      )}
+   160→  1009→
+   161→  1010→      {/* contenido */}
+   162→  1011→      <div className="relative min-h-0 flex-1">
+   163→  1012→        {tabs.map((t, i) => (
+   164→  1013→          <div key={t.id} className={`absolute inset-0 ${i === activeTab ? "" : "hidden"}`}>
+   165→  1014→            {t.url === START ? (
+   166→  1015→              <StartPage
+   167→  1016→                bookmarks={bookmarks}
+   168→  1017→                history={safariHistory.slice(0, 8)}
+   169→  1018→                engineReady={engineDiag.status === "ready"}
+   170→  1019→                engineWisp={engineDiag.wispUrl || browser.wispUrl}
+   171→  1020→                engineKind={
+   172→  1021→                  (engineDiag.wispUrl || browser.wispUrl) === MAIN_WISP ? "own" : (engineDiag.wispUrl || browser.wispUrl) === DEMO_WISP ? "demo" : "other"
+   173→  1022→                }
+   174→  1023→                onOpen={(url) => navigateTab(t.id, url)}
+   175→  1024→                onSearch={(q) => navigateTab(t.id, SEARCH_PREFIX + encodeURIComponent(q))}
+   176→  1025→                onOpenSettings={() => openApp("settings", { payload: { section: "browser" } })}
+   177→  1026→              />
+   178→  1027→            ) : t.url.startsWith(SEARCH_PREFIX) ? (
+   179→  1028→              <SearchResultsPage
+   180→  1029→                query={decodeURIComponent(t.url.slice(SEARCH_PREFIX.length))}
+   181→  1030→                engine={browser.searchEngine}
+   182→  1031→                searxngUrl={browser.searxngUrl}
+   183→  1032→                onOpen={(url) => navigateTab(t.id, url)}
+   184→  1033→                onFallback={() => navigateTab(t.id, `https://html.duckduckgo.com/html/?q=${encodeURIComponent(decodeURIComponent(t.url.slice(SEARCH_PREFIX.length)))}`)}
+   185→  1034→              />
+   186→  1035→            ) : parseYouTubeUrl(t.url) ? (
+   187→  1036→              <YouTubeApp
+   188→  1037→                key={`${t.id}|${t.url}|${t.rNonce ?? 0}`}
+   189→  1038→                embedded
+   190→  1039→                initialView={parseYouTubeUrl(t.url) ?? undefined}
+   191→  1040→                onNavigate={(u) => navigateTab(t.id, u)}
+   192→  1041→                onBack={() => cmd("back")}
+   193→  1042→                canBack={t.hIndex > 0}
+   194→  1043→                onTitle={(title) => patchTab(t.id, { title })}
+   195→  1044→              />
+   196→  1045→            ) : (
+   197→  1046→              <>
+   198→  1047→                <iframe
+   199→  1048→                  key={`${t.id}|d${t.direct ? 1 : 0}|f${t.fNonce ?? 0}`}
+   200→  1049→                  ref={(el) => {
+   201→  1050→                    if (el) iframeRefs.current.set(t.id, el);
+   202→  1051→                    else iframeRefs.current.delete(t.id);
+   203→  1052→                  }}
+   204→  1053→                  title={t.title}
+   205→  1054→                  src={t.direct ? t.url : "about:blank"}
+   206→  1055→                  className="h-full w-full border-0 bg-white"
+   207→  1056→                  allow="fullscreen; autoplay; encrypted-media; picture-in-picture; clipboard-write; gamepad"
+   208→  1057→                  onLoad={() => {
+   209→  1058→                    const cur = tabsRef.current.find((x) => x.id === t.id);
+   210→  1059→                    if (cur?.direct) {
+   211→  1060→                      // modo directo: el iframe real cargó (o el propio navegador mostró su rechazo)
+   212→  1061→                      hangRef.current.delete(t.id);
+   213→  1062→                      patchTab(t.id, { loading: false, error: undefined });
+   214→  1063→                      // memorizar solo si sigue puesta ≥8 s (evita guardar páginas de rechazo)
+   215→  1064→                      const host = hostOf(t.url);
+   216→  1065→                      setTimeout(() => {
+   217→  1066→                        const later = tabsRef.current.find((x) => x.id === t.id);
+   218→  1067→                        if (later && later.direct && later.url === t.url && !later.loading && !later.error) rememberDirectOk(host);
+   219→  1068→                      }, 8000);
+   220→  1069→                      return;
+   221→  1070→                    }
+   222→  1071→                    // modo motor: ¿página de error del servidor? → la escalera sigue al siguiente escalón
+   223→  1072→                    let doc: Document | null | null = null;
+   224→  1073→                    try {
+   225→  1074→                      doc = iframeRefs.current.get(t.id)?.contentDocument ?? null;
+   226→  1075→                    } catch {
+   227→  1076→                      doc = null;
+   228→  1077→                    }
+   229→  1078→                    if (looksLikeErrorPage(doc)) {
+   230→  1079→                      const h = hangRef.current.get(t.id);
+   231→  1080→                      if (h) {
+   232→  1081→                        const next = h.queue.shift();
+   233→  1082→                        if (!next || next === "error") {
+   234→  1083→                          void runPhase(t, "error", []);
+   235→  1084→                        } else {
+   236→  1085→                          void runPhase(t, next, h.queue);
+   237→  1086→                        }
+   238→  1087→                        return; // NO marcar como cargada: no lo es
+   239→  1088→                      }
+   240→  1089→                    }
+   241→  1090→                    hangRef.current.delete(t.id); // la página cargó: escalera completada
+   242→  1091→                    patchTab(t.id, { loading: false, error: undefined });
+   243→  1092→                    readPageMeta(t.id);
+   244→  1093→                    attachClickCapture(t.id);
+   245→  1094→                    unlockRootScroll(t.id);
+   246→  1095→                  }}
+   247→  1096→                />
+   248→  1097→                {t.error && (
+   249→  1098→                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-white/95 p-6 text-center backdrop-blur-sm dark:bg-neutral-900/95">
+   250→  1099→                    <XCircle size={38} className="shrink-0 text-red-500" />
+   251→  1100→                    <div className="max-w-md space-y-1">
+   252→  1101→                      <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">La página no cargó</p>
+   253→  1102→                      <p className="text-xs leading-relaxed text-neutral-600 dark:text-neutral-400">{t.error}</p>
+   254→  1103→                    </div>
+   255→  1104→                    <div className="flex gap-2">
+   256→  1105→                      <button
+   257→  1106→                        onClick={() => navigateTab(t.id, t.url, { push: false })}
+   258→  1107→                        className="rounded-lg bg-[var(--accent-os)] px-3.5 py-1.5 text-xs font-medium text-white shadow transition hover:opacity-90"
+   259→  1108→                      >
+   260→  1109→                        Reintentar
+   261→  1110→                      </button>
+   262→  1111→                      <button
+   263→  1112→                        onClick={() => openApp("settings", { payload: { section: "browser" } })}
+   264→  1113→                        className="rounded-lg bg-black/5 px-3.5 py-1.5 text-xs font-medium text-neutral-700 shadow transition hover:bg-black/10 dark:bg-white/10 dark:text-neutral-200 dark:hover:bg-white/20"
+   265→  1114→                      >
+   266→  1115→                        Ajustes del navegador
+   267→  1116→                      </button>
+   268→  1117→                    </div>
+   269→  1118→                  </div>
+   270→  1119→                )}
+   271→  1120→              </>
+   272→  1121→            )}
+   273→  1122→          </div>
+   274→  1123→        ))}
+   275→  1124→      </div>
+   276→  1125→    </div>
+   277→  1126→  );
+   278→  1127→
+   279→  1128→  function onKeyDownShell(e: React.KeyboardEvent) {
+   280→  1129→    if ((e.metaKey || e.ctrlKey) && e.key === "l") {
+   281→  1130→      e.preventDefault();
+   282→  1131→      const input = (e.currentTarget as HTMLElement).querySelector("input");
+   283→  1132→      (input as HTMLInputElement | null)?.focus();
+   284→  1133→      (input as HTMLInputElement | null)?.select();
+   285→  1134→    } else if ((e.metaKey || e.ctrlKey) && e.key === "t") {
+   286→  1135→      e.preventDefault();
+   287→  1136→      newTab();
+   288→  1137→    } else if ((e.metaKey || e.ctrlKey) && e.key === "w") {
+   289→  1138→      e.preventDefault();
+   290→  1139→      const t = tabsRef.current[activeRef.current];
+   291→  1140→      if (t) closeTab(t.id);
+   292→  1141→    }
+   293→  1142→  }
+   294→  1143→}
+   295→  1144→
+   296→  1145→/* ============================================================
+   297→  1146→   Página de inicio
+   298→  1147→   ============================================================ */
+   299→  1148→function StartPage({
+   300→  1149→  bookmarks,
+   301→  1150→  history,
+   302→  1151→  engineReady,
+   303→  1152→  engineWisp,
+   304→  1153→  engineKind,
+   305→  1154→  onOpen,
+   306→  1155→  onSearch,
+   307→  1156→  onOpenSettings,
+   308→  1157→}: {
+   309→  1158→  bookmarks: { id: string; url: string; name: string; folder?: string }[];
+   310→  1159→  history: { id: string; url: string; title: string }[];
+   311→  1160→  engineReady: boolean;
+   312→  1161→  engineWisp: string;
+   313→  1162→  engineKind: "own" | "demo" | "other";
+   314→  1163→  onOpen: (url: string) => void;
+   315→  1164→  onSearch: (q: string) => void;
+   316→  1165→  onOpenSettings: () => void;
+   317→  1166→}) {
+   318→  1167→  const [q, setQ] = useState("");
+   319→  1168→  const favs = bookmarks.filter((b) => b.folder === "Favoritos").slice(0, 8);
+   320→  1169→  const list = favs.length ? favs : bookmarks.slice(0, 8);
+   321→  1170→
+   322→  1171→  return (
+   323→  1172→    <div className="mac-scrollbar h-full overflow-y-auto bg-gradient-to-b from-neutral-50 to-neutral-100 px-8 py-10 dark:from-neutral-900 dark:to-neutral-950">
+   324→  1173→      <div className="mx-auto max-w-xl">
+   325→  1174→        <h2 className="mb-1 text-center text-[15px] font-semibold text-neutral-700 dark:text-neutral-200">Explorar con Safari</h2>
+   326→  1175→        <p className="mb-5 text-center text-[11px] text-neutral-400">Navegación real por el motor Scramjet · todo dentro de axcsOS</p>
+   327→  1176→
+   328→  1177→        <form
+   329→  1178→          className="mb-6 flex h-10 items-center gap-2 rounded-xl bg-white shadow-sm ring-1 ring-black/5 focus-within:ring-2 focus-within:ring-[var(--accent-os)]/50 dark:bg-neutral-800 dark:ring-white/10"
+   330→  1179→          onSubmit={(e) => {
+   331→  1180→            e.preventDefault();
+   332→  1181→            if (q.trim()) onSearch(q.trim());
+   333→  1182→          }}
+   334→  1183→        >
+   335→  1184→          <Search size={14} className="ml-3 shrink-0 text-neutral-400" />
+   336→  1185→          <input
+   337→  1186→            value={q}
+   338→  1187→            onChange={(e) => setQ(e.target.value)}
+   339→  1188→            placeholder="Buscar en la web (Bing)"
+   340→  1189→            className="h-full w-full bg-transparent text-[13px] text-neutral-700 outline-none dark:text-neutral-100"
+   341→  1190→          />
+   342→  1191→        </form>
+   343→  1192→
+   344→  1193→        <div className="grid grid-cols-4 gap-4">
+   345→  1194→          {list.map((f) => {
+   346→  1195→            const key = hostOf(f.url);
+   347→  1196→            const meta = FAV_LETTER[key] ?? { color: "linear-gradient(135deg,#64748b,#334155)", letter: f.name[0]?.toUpperCase() ?? "•" };
+   348→  1197→            return (
+   349→  1198→              <button key={f.id} onClick={() => onOpen(f.url)} className="group flex flex-col items-center gap-2">
+   350→  1199→                <div className="flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-bold text-white shadow-md transition group-hover:scale-105" style={{ background: meta.color }}>
+   351→  1200→                  {meta.letter}
+   352→  1201→                </div>
+   353→  1202→                <span className="max-w-full truncate text-[11px] text-neutral-600 dark:text-neutral-300">{f.name}</span>
+   354→  1203→              </button>
+   355→  1204→            );
+   356→  1205→          })}
+   357→  1206→        </div>
+   358→  1207→
+   359→  1208→        {history.length > 0 && (
+   360→  1209→          <div className="glass lg-specular mx-auto mt-8 max-w-md rounded-2xl p-4 dark:glass-dark">
+   361→  1210→            <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+   362→  1211→              <Clock size={12} /> Visitados recientemente
+   363→  1212→            </div>
+   364→  1213→            <div className="flex flex-col gap-1">
+   365→  1214→              {history.slice(0, 5).map((h) => (
+   366→  1215→                <button key={h.id} onClick={() => onOpen(h.url)} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-black/5 dark:hover:bg-white/10">
+   367→  1216→                  <Globe size={11} className="shrink-0 text-neutral-400" />
+   368→  1217→                  <span className="min-w-0 flex-1 truncate text-[11px] text-neutral-600 dark:text-neutral-300">{h.title || h.url}</span>
+   369→  1218→                  <span className="shrink-0 text-[10px] text-neutral-400">{hostOf(h.url)}</span>
+   370→  1219→                </button>
+   371→  1220→              ))}
+   372→  1221→            </div>
+   373→  1222→          </div>
+   374→  1223→        )}
+   375→  1224→
+   376→  1225→        <div className="glass lg-specular mx-auto mt-4 max-w-md rounded-2xl p-4 text-[11px] leading-relaxed text-neutral-500 dark:glass-dark dark:text-neutral-400">
+   377→  1226→          <div className="mb-1 flex items-center gap-2">
+   378→  1227→            <span className={`h-2 w-2 rounded-full ${engineReady ? "bg-emerald-500" : "bg-amber-500"}`} />
+   379→  1228→            <b className="text-neutral-600 dark:text-neutral-300">Motor {engineReady ? "activo" : "iniciando…"}</b>
+   380→  1229→            <span className="min-w-0 flex-1 truncate text-neutral-400">{engineWisp}</span>
+   381→  1230→          </div>
+   382→  1231→          {engineKind === "own" ? (
+   383→  1232→            <p>
+   384→  1233→              Motor propio del estudio activo (wisp en Render). Si se cae, axcsOS conmuta solo al respaldo público y
+   385→  1234→              vuelve cuando el propio recupera la salud.
+   386→  1235→            </p>
+   387→  1236→          ) : engineKind === "demo" ? (
+   388→  1237→            <p>
+   389→  1238→              Conectado al transporte público de demostración de Mercury Workshop (respaldo externo, sin garantía). El
+   390→  1239→              motor propio del estudio se retomará automáticamente cuando responda. Puedes forzar el reintento desde{" "}
+   391→  1240→              <button onClick={onOpenSettings} className="font-semibold text-[var(--accent-os)] underline">
+   392→  1241→                Ajustes → Navegador
+   393→  1242→              </button>
+   394→  1243→              .
+   395→  1244→            </p>
+   396→  1245→          ) : null}
+   397→  1246→        </div>
+   398→  1247→      </div>
+   399→  1248→    </div>
+   400→  1249→  );
+   401→  1250→}
+   402→  1251→
+   403→  1252→/* ============================================================
+   404→  1253→   Resultados de búsqueda nativos (DDG vía motor · SearXNG opcional)
+   405→  1254→   ============================================================ */
+   406→  1255→function SearchResultsPage({ query, engine, searxngUrl, onOpen, onFallback }: { query: string; engine: "bing" | "searxng"; searxngUrl: string; onOpen: (url: string) => void; onFallback: () => void }) {
+   407→  1256→  const [results, setResults] = useState<SearchResult[] | null>(null);
+   408→  1257→  const [error, setError] = useState<string | null>(null);
+   409→  1258→  const [engineName, setEngineName] = useState(engine === "searxng" ? "SearXNG" : "Bing");
+   410→  1259→
+   411→  1260→  useEffect(() => {
+   412→  1261→    let alive = true;
+   413→  1262→    void (async () => {
+   414→  1263→      setResults(null);
+   415→  1264→      setError(null);
+   416→  1265→      try {
+   417→  1266→        let res: SearchResult[];
+   418→  1267→        if (engine === "searxng" && searxngUrl) {
+   419→  1268→          setEngineName("SearXNG");
+   420→  1269→          res = await searchSearXNG(searxngUrl, query);
+   421→  1270→        } else {
+   422→  1271→          setEngineName("Bing");
+   423→  1272→          // 1) Bing RSS (resultados reales, sin clave)
+   424→  1273→          try {
+   425→  1274→            // 1) Bing RSS (resultados reales, sin clave)
+   426→  1275→            res = await searchBingRSS(query);
+   427→  1276→          } catch {
+   428→  1277→            // 2) DDG html como respaldo
+   429→  1278→            res = await searchDDG(query);
+   430→  1279→          }
+   431→  1280→        }
+   432→  1281→        if (!alive) return;
+   433→  1282→        if (res.length === 0) {
+   434→  1283→          // el proveedor bloqueó la consulta directa: abrir la búsqueda DENTRO
+   435→  1284→          // del motor, donde el desafío se ejecuta con JavaScript real
+   436→  1285→          setError("");
+   437→  1286→          setTimeout(() => alive && onFallback(), 900);
+   438→  1287→          return;
+   439→  1288→        }
+   440→  1289→        setResults(res);
+   441→  1290→      } catch (e) {
+   442→  1291→        if (!alive) return;
+   443→  1292→        setError("");
+   444→  1293→        setTimeout(() => alive && onFallback(), 900);
+   445→  1294→      }
+   446→  1295→    })();
+   447→  1296→    return () => {
+   448→  1297→      alive = false;
+   449→  1298→    };
+   450→  1299→  }, [query, engine, searxngUrl, onFallback]);
+   451→  1300→
+   452→  1301→  return (
+   453→  1302→    <div className="mac-scrollbar h-full overflow-y-auto bg-white dark:bg-neutral-950">
+   454→  1303→      <div className="mx-auto max-w-2xl px-6 py-8">
+   455→  1304→        <div className="mb-4 flex items-center gap-2 text-[12px] text-neutral-400">
+   456→  1305→          <Search size={13} />
+   457→  1306→          Resultados de {engineName} para <b className="text-neutral-600 dark:text-neutral-200">{query}</b>
+   458→  1307→          <span className="ml-auto text-[10px]">{results === null ? "consultando…" : "cargados por el motor Scramjet"}</span>
+   459→  1308→        </div>
+   460→  1309→        {error !== null && (
+   461→  1310→          <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-[12px] text-amber-700 dark:text-amber-300">
+   462→  1311→            <Search size={13} className="shrink-0" />
+   463→  1312→            El proveedor bloqueó la consulta directa. Abriendo la búsqueda dentro del motor (donde funciona con JavaScript real)…
+   464→  1313→          </div>
+   465→  1314→        )}
+   466→  1315→        {!error && !results && (
+   467→  1316→          <div className="flex flex-col gap-3">
+   468→  1317→            {[...Array(5)].map((_, i) => (
+   469→  1318→              <div key={i} className="h-16 animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+   470→  1319→            ))}
+   471→  1320→          </div>
+   472→  1321→        )}
+   473→  1322→        <div className="flex flex-col gap-4">
+   474→  1323→          {results?.map((r, i) => (
+   475→  1324→            <div key={i} className="group cursor-pointer rounded-xl p-3 transition hover:bg-black/[0.03] dark:hover:bg-white/[0.04]" onClick={() => onOpen(r.url)}>
+   476→  1325→              <div className="flex items-center gap-2 text-[11px] text-emerald-600 dark:text-emerald-400">
+   477→  1326→                <Globe size={10} />
+   478→  1327→                <span className="truncate">{r.host}</span>
+   479→  1328→              </div>
+   480→  1329→              <div className="text-[14px] font-medium text-[var(--accent-os)] group-hover:underline">{r.title}</div>
+   481→  1330→              <p className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-neutral-500 dark:text-neutral-400">{r.snippet}</p>
+   482→  1331→            </div>
+   483→  1332→          ))}
+   484→  1333→        </div>
+   485→  1334→      </div>
+   486→  1335→    </div>
+   487→  1336→  );
+   488→  1337→}
+   489→  1338→
+   490→  1339→/** Búsqueda real con Bing (salida RSS pública, sin clave) a través del motor. */
+   491→  1340→async function searchBingRSS(query: string): Promise<SearchResult[]> {
+   492→  1341→  const target = `https://www.bing.com/search?q=${encodeURIComponent(query)}&format=rss&count=20`;
+   493→  1342→  const res = await engineFetch(target, { signal: AbortSignal.timeout(9000) });
+   494→  1343→  if (!res.ok) throw new Error(`Bing RSS devolvió HTTP ${res.status}`);
+   495→  1344→  const xml = await res.text();
+   496→  1345→  const doc = new DOMParser().parseFromString(xml, "text/xml");
+   497→  1346→  const out: SearchResult[] = [];
+   498→  1347→  doc.querySelectorAll("item").forEach((it) => {
+   499→  1348→    const url = it.querySelector("link")?.textContent?.trim() ?? "";
+   500→  1349→    const title = it.querySelector("title")?.textContent?.trim() ?? url;
+   501→  1350→    const snippet = (it.querySelector("description")?.textContent ?? "").replace(/<[^>]+>/g, "").trim();
+   502→  1351→    if (/^https?:/i.test(url)) out.push({ title, url, snippet, host: hostOf(url) });
+   503→  1352→  });
+   504→  1353→  return out.slice(0, 20);
+   505→  1354→}
+   506→  1355→
+   507→  1356→/** Búsqueda real: DDG html a través del motor → parseo a resultados nativos. */
+   508→  1357→async function searchDDG(query: string): Promise<SearchResult[]> {
+   509→  1358→  const target = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+   510→  1359→  const res = await engineFetch(target, {
+   511→  1360→    headers: { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36" },
+   512→  1361→    signal: AbortSignal.timeout(9000),
+   513→  1362→  });
+   514→  1363→  if (!res.ok) throw new Error(`El motor devolvió HTTP ${res.status} al consultar DuckDuckGo`);
+   515→  1364→  const html = await res.text();
+   516→  1365→  const doc = new DOMParser().parseFromString(html, "text/html");
+   517→  1366→  const out: SearchResult[] = [];
+   518→  1367→  doc.querySelectorAll(".result, .web-result").forEach((el) => {
+   519→  1368→    const a = el.querySelector<HTMLAnchorElement>("a.result__a");
+   520→  1369→    if (!a) return;
+   521→  1370→    let href = a.getAttribute("href") || "";
+   522→  1371→    // enlaces redirigidos de DDG: //duckduckgo.com/l/?uddg=<url codificada>
+   523→  1372→    const m = /[?&]uddg=([^&]+)/.exec(href);
+   524→  1373→    if (m) {
+   525→  1374→      try {
+   526→  1375→        href = decodeURIComponent(m[1]);
+   527→  1376→      } catch { /* ignore */ }
+   528→  1377→    }
+   529→  1378→    if (href.startsWith("//")) href = "https:" + href;
+   530→  1379→    if (!/^https?:/i.test(href)) return;
+   531→  1380→    const snippet = el.querySelector(".result__snippet")?.textContent?.trim() ?? "";
+   532→  1381→    out.push({ title: a.textContent?.trim() || href, url: href, snippet, host: hostOf(href) });
+   533→  1382→  });
+   534→  1383→  return out.slice(0, 20);
+   535→  1384→}
+   536→  1385→
+   537→  1386→/** Búsqueda SearXNG (instancia propia con API JSON habilitada). */
+   538→  1387→async function searchSearXNG(base: string, query: string): Promise<SearchResult[]> {
+   539→  1388→  const url = `${base.replace(/\/+$/, "")}/search?q=${encodeURIComponent(query)}&format=json`;
+   540→  1389→  const res = await fetch(url, { headers: { accept: "application/json" } });
+   541→  1390→  if (!res.ok) throw new Error(`SearXNG respondió HTTP ${res.status}. Comprueba que la instancia tenga format=json habilitado y permita CORS.`);
+   542→  1391→  const data = (await res.json()) as { results?: { title?: string; url?: string; content?: string }[] };
+   543→  1392→  return (data.results ?? [])
+   544→  1393→    .filter((r) => r.url && /^https?:/i.test(r.url))
+   545→  1394→    .slice(0, 20)
+   546→  1395→    .map((r) => ({ title: r.title ?? r.url ?? "", url: r.url!, snippet: r.content ?? "", host: hostOf(r.url!) }));
+   547→  1396→}
+   548→  1397→
+   549→  1398→/* ============================================================
+   550→  1399→   Panel lateral: marcadores / historial
+   551→  1400→   ============================================================ */
+   552→  1401→function SidePanel({
+   553→  1402→  kind,
+   554→  1403→  bookmarks,
+   555→  1404→  history,
+   556→  1405→  onOpen,
+   557→  1406→  onRemoveBookmark,
+   558→  1407→  onRemoveHistory,
+   559→  1408→  onClearHistory,
+   560→  1409→  onClose,
+   561→  1410→}: {
+   562→  1411→  kind: "bookmarks" | "history";
+   563→  1412→  bookmarks: { id: string; url: string; name: string; folder?: string }[];
+   564→  1413→  history: { id: string; url: string; title: string; time: number }[];
+   565→  1414→  onOpen: (url: string) => void;
+   566→  1415→  onRemoveBookmark: (id: string) => void;
+   567→  1416→  onRemoveHistory: (id: string) => void;
+   568→  1417→  onClearHistory: () => void;
+   569→  1418→  onClose: () => void;
+   570→  1419→}) {
+   571→  1420→  return (
+   572→  1421→    <div className="mac-scrollbar max-h-48 shrink-0 overflow-y-auto border-b border-black/8 bg-neutral-50/95 px-3 py-2 dark:border-white/8 dark:bg-neutral-900/95">
+   573→  1422→      <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
+   574→  1423→        {kind === "bookmarks" ? <BookMarked size={11} /> : <HistoryIcon size={11} />}
+   575→  1424→        {kind === "bookmarks" ? "Marcadores" : "Historial"}
+   576→  1425→        <span className="flex-1" />
+   577→  1426→        {kind === "history" && history.length > 0 && (
+   578→  1427→          <button onClick={onClearHistory} className="rounded px-1.5 py-0.5 text-[10px] font-medium text-rose-500 transition hover:bg-rose-500/10">
+   579→  1428→            Borrar todo
+   580→  1429→          </button>
+   581→  1430→        )}
+   582→  1431→        <button onClick={onClose} className="rounded p-0.5 transition hover:bg-black/10 dark:hover:bg-white/10">
+   583→  1432→          <X size={11} />
+   584→  1433→        </button>
+   585→  1434→      </div>
+   586→  1435→      <div className="flex flex-col">
+   587→  1436→        {kind === "bookmarks" &&
+   588→  1437→          (bookmarks.length === 0 ? (
+   589→  1438→            <span className="px-2 py-1.5 text-[11px] text-neutral-400">Sin marcadores todavía. Pulsa la estrella para guardar la página actual.</span>
+   590→  1439→          ) : (
+   591→  1440→            bookmarks.map((b) => (
+   592→  1441→              <div key={b.id} className="group flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-black/5 dark:hover:bg-white/10">
+   593→  1442→                <button onClick={() => onOpen(b.url)} className="min-w-0 flex-1 truncate text-left text-[11px] text-neutral-600 dark:text-neutral-300">
+   594→  1443→                  {b.name} <span className="text-neutral-400">· {hostOf(b.url)}</span>
+   595→  1444→                </button>
+   596→  1445→                <button onClick={() => onRemoveBookmark(b.id)} className="shrink-0 rounded p-0.5 text-neutral-400 opacity-0 transition hover:text-rose-500 group-hover:opacity-100" title="Eliminar">
+   597→  1446→                  <X size={10} />
+   598→  1447→                </button>
+   599→  1448→              </div>
+   600→  1449→            ))
+   601→  1450→          ))}
+   602→  1451→        {kind === "history" &&
+   603→  1452→          (history.length === 0 ? (
+   604→  1453→            <span className="px-2 py-1.5 text-[11px] text-neutral-400">Sin historial. Se guarda según Ajustes → Navegador.</span>
+   605→  1454→          ) : (
+   606→  1455→            history.map((h) => (
+   607→  1456→              <div key={h.id} className="group flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-black/5 dark:hover:bg-white/10">
+   608→  1457→                <button onClick={() => onOpen(h.url)} className="min-w-0 flex-1 truncate text-left text-[11px] text-neutral-600 dark:text-neutral-300">
+   609→  1458→                  {h.title || h.url} <span className="text-neutral-400">· {hostOf(h.url)}</span>
+   610→  1459→                </button>
+   611→  1460→                <span className="shrink-0 text-[9px] text-neutral-400">{new Date(h.time).toLocaleDateString()}</span>
+   612→  1461→                <button onClick={() => onRemoveHistory(h.id)} className="shrink-0 rounded p-0.5 text-neutral-400 opacity-0 transition hover:text-rose-500 group-hover:opacity-100" title="Eliminar entrada">
+   613→  1462→                  <X size={10} />
+   614→  1463→                </button>
+   615→  1464→              </div>
+   616→  1465→            ))
+   617→  1466→          ))}
+   618→  1467→      </div>
+   619→  1468→    </div>
+   620→  1469→  );
+   621→  1470→}
+   622→
+   623→[showing lines 850-1470 of 1471; use offset=1471 with limit to continue reading]
