@@ -50,6 +50,13 @@
       "salt": "fun1SOby45G6ju4SqQD0xw==",
       "hash": "G1UqKCts9krqZdA2RM+/P0tgfUZQmc8TFhSMSLWt9iw=",
       "created": "2026-10-22T00:20:25.082Z"
+    },
+    {
+      "id": "acc-mvjn93l1hyvop",
+      "username": "mathiewcn",
+      "salt": "pfVBiu79qN9xTVVgBifJUw==",
+      "hash": "KVGHi/AVw6mhaOYzK42idCFxrOtDrYzoHuAua4nQm0c=",
+      "created": "2026-10-22T14:36:15.589Z"
     }
   ]
 }
