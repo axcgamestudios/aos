@@ -245,3 +245,19 @@ Stage Summary:
 - https://axcgamestudios.github.io/aos/ ya sirve TODO: Mail axcsOS + instalar página como app + App Store (tarea 9) y AXC ID con OTP + bóveda AES-256 + autocompletado + sesiones por perfil (tarea 10).
 - main y gh-pages en GitHub al día. El workflow .github/workflows/deploy-pages.yml queda en main como vía alternativa (si el usuario activa Pages → GitHub Actions, cada push a main se publicará solo).
 - Para OTP con Resend en un despliegue con servidor Node (Render/Vercel/propio): añadir RESEND_API_KEY; en Pages, el respaldo FormSubmit parte desde la IP del usuario y funciona desde navegadores residenciales.
+---
+Task ID: 12
+Agent: main (Z.ai)
+Task: Las páginas instaladas como apps deben abrir SIEMPRE con el motor (navegador nativo), no de manera directa
+
+Work Log:
+- CAUSA RAÍZ (src/os/apps/WebAppFrame.tsx): la fase inicial de la ventana se decidía con la memoria compartida de "sitios direct-ok" (axcsos.safari.direct-ok, misma clave que Safari) — si el sitio ya había cargado en directo alguna vez, la app arrancaba DIRECTO en fase "direct" sin pasar por el motor (useState inicial + rama en el efecto de montaje). Así, las apps instaladas de sitios que Safari había degradado a directo (p. ej. juegos) se abrían "de manera directa".
+- CORRECCIÓN: una app SIEMPRE abre en fase "engine" (motor primero, sin importar la memoria). La conexión directa queda SOLO como respaldo honesto cuando el motor no puede con el sitio (error page detectada, motor caído o escalera de tiempos), igual que antes. La memoria direct-ok ya no es un atajo: ahora es una PISTA (ladderRef.fast) que acorta la ventana del motor (9 s sin progreso / 16 s tope en vez de 20 s / 45 s) cuando hay evidencia previa de que el sitio solo cargó en directo — pero el motor SIEMPRE se intenta primero.
+- E2E DEV (agent-browser, cuenta probatest local): instalada example.com como app desde Safari → cerrada la ventana → sembrada la memoria direct-ok con ["example.com"] → reabierta desde el Dock → la app abre con el MOTOR: 0 chips "directa", iframe de la ventana src=/scramjet/https%3A%2F%2F…, mismo-origen, título "Example Domain" con 22 nodos reales. Botones propios de la toolbar presentes (verificación de que se inspeccionaba la ventana de la app, no la pestaña de Safari). Recarga sin errores; 0 errores de consola en todo el flujo. Contraseña local de probatest restablecida (scripts/add-test-account.mjs ahora soporta --reset; solo local, el accounts.json remoto de gh-pages sigue preservado).
+- DESPLIEGUE: build:pages → worktree aislado .deploy-gh (excluye .git, data/accounts.json y .nojekyll) → gh-pages 7312ab1..f751a0f; main 5afd360..9798cb3. Huella del arreglo verificada EN VIVO: el chunk de la app (324893488b563a27.js) sirve 200 con "fast?9e3"/"fast?16e3" (la pista nueva) y el sitio arranca limpio (login + AXC ID, 0 errores).
+- Evidencias: scripts/shots/deploy12-app-motor.png, deploy12-app-motor-reopen.png.
+
+Stage Summary:
+- Las apps instaladas (App Store y "instalar página como app") abren SIEMPRE con el motor; "directa" es solo el respaldo visible con chip cuando el motor genuinamente no puede con el sitio.
+- Para sitios que solo cargan en directo, el reintento con el motor es rápido (9-16 s con pista) en vez de esperar el tope completo.
+- Desplegado y verificado en https://axcgamestudios.github.io/aos/.
