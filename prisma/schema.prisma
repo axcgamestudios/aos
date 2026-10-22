@@ -13,6 +13,39 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================================
+// Verificación de correo (AXC ID) — códigos OTP de un solo uso
+// ============================================================
+
+/// Códigos de 6 dígitos: solo se guarda el hash PBKDF2-SHA256
+/// (nunca el código en claro). Un código = un correo = 10 min.
+model OtpCode {
+  id         String    @id @default(cuid())
+  email      String
+  /// PBKDF2-SHA256(code, salt) en hex
+  codeHash   String
+  /// sal aleatoria por código (hex)
+  salt       String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  /// true solo si el proveedor de correo aceptó el envío
+  sent       Boolean   @default(false)
+  consumedAt DateTime?
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  @@index([email, createdAt])
+}
+
+/// Correos verificados de una vez (registro remoto del perfil):
+/// probar el código demuestra el control del buzón.
+model VerifiedEmail {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  verifiedAt  DateTime @default(now())
+  verifyCount Int      @default(1)
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
