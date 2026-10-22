@@ -282,3 +282,23 @@ Stage Summary:
 - Escritorio real: crear carpetas y archivos .txt, renombrar, eliminar, añadir apps al fondo, y TODOS los iconos se arrastran con posición libre persistida. Finder, escritorio y TextEdit comparten el mismo sistema de archivos en vivo.
 - Además se corrigió un bug preexistente que impedía clicar los iconos del escritorio (capa del WindowManager).
 - Live: https://axcgamestudios.github.io/aos/ con Actions activo para despliegues futuros.
+
+---
+Task ID: 14
+Agent: main (Z.ai)
+Task: Arreglar los deploys de Actions que nunca se hicieron (7/7 en rojo): el workflow "Deploy axcsOS to GitHub Pages" fallaba en todos los pushes a main
+
+Work Log:
+- DIAGNÓSTICO (vía API de GitHub con el PAT): todos los runs del workflow fallaban igual — job build SIEMPRE verde (bun install + build:pages + artefacto OK) pero job deploy muerto SIN EJECUTAR NI UN PASO (6.5 min esperando, sin runner). La anotación del check-run reveló la causa exacta: "Branch main is not allowed to deploy to github-pages due to environment protection rules" — Pages estaba en modo LEGACY (servido desde la rama gh-pages), y ese modo crea automáticamente una política de protección del entorno github-pages que SOLO permite desplegar desde la rama gh-pages. Todo deploy de Actions desde main era rechazado de raíz. Los builds legacy de la rama gh-pages sí funcionaban (por eso el sitio estaba al día de la tarea 13 a pesar del workflow en rojo).
+- FIX DE RAIZ (API): Pages pasó de build_type=legacy a build_type=workflow (despliegue por GitHub Actions); al cambiarlo, GitHub añadió main a la política de ramas del entorno github-pages (verificado: gh-pages + main, protección levantada). Elección deliberada: NO se dejó en legacy con un workflow que empuja gh-pages, porque los pushes hechos con GITHUB_TOKEN no disparan los builds legacy de Pages (habría que forzarlos con POST /pages/builds) y rompería el flujo del panel.
+- COMPATIBILIDAD DEL PANEL PRESERVADA (verificada ANTES de tocar nada): el panel de administración hace dual-push de data/accounts.json a main (public/data/accounts.json) Y gh-pages; las 8 cuentas vivas (adan, alvaro_j, california, elcostinero, ilogoa, mateo_rgz, mathiewcn, niggaflow_08) eran idénticas en main, gh-pages y live → el deploy por Actions sirve las cuentas SIN pérdida. A partir de ahora las cuentas nuevas que el panel empuja a main se publican solas vía Actions (~5-7 min); los pushes del panel a gh-pages quedan inertes (inofensivos).
+- .NOJEKYLL EN EL ARTEFACTO (scripts/build-pages.mjs): el build no creaba out/.nojekyll (mi proceso manual lo tocaba a mano en el worktree) — sin él, Jekyll podría descartar _next/ del artefacto que publica upload-pages-artifact. Ahora build:pages lo crea SIEMPRE (Actions o local), verificado node --check y en el run real (chunks _next sirven 200 en live).
+- .GITIGNORE REPARADO: los patrones /skills/ y .deploy-gh/ se habían PARTIDO en una sola línea rota "/skills/.deploy-gh/" que no ignoraba nada (por eso un auto-commit del entorno pudo trackear skills/); separados de nuevo y verificados con git check-ignore (skills/ y .deploy-gh ambos ignorados).
+- HIGIENE LOCAL: el ref local origin/main estaba STALE (cd13de4, era tarea 12) mientras el remoto real ya estaba en 07b99e6 — fuente de lecturas engañosas durante el diagnóstico; se cayó el auto-commit basura ae522ad (skills/ + gitlink de .deploy-gh) de la historia de main sin perder nada (todo su contenido real ya vivía en 07b99e6) y se sincronizaron los refs con fetch. La rama main del remoto SIEMPRE estuvo completa (tarea 13 incluida); los refusos de la sesión anterior sí llegaron.
+- PUSH eea07e4 → RUN 8: SUCCESS — primer deploy verde del workflow (8º intento; 0/7 antes). Cadena de deployment verificada por API: waiting → queued → in_progress → success @ eea07e4. Live verificado: sitio 200, 8 cuentas intactas, manifest con el código del FS de la tarea 13 (axcsos-fs) en los chunks servidos, _next/ sirviendo 200 (nojekyll OK), arranque limpio con 0 errores de consola (agent-browser: login screen con fecha/reloj/AXC ID renderizados).
+- A partir de ahora: cada push a main se publica SOLO (trigger on.push branches [main] + workflow_dispatch manual). El proceso manual de build local + worktree .deploy-gh + push gh-pages queda OBSOLETO (se mantiene el worktree local por si acaso, ya gitignored).
+
+Stage Summary:
+- El workflow de deploy ya funciona: run 8 verde completo (build+deploy) tras arreglar el modo de Pages (legacy→workflow, política de entorno que bloqueaba main), añadir .nojekyll al artefacto y reparar .gitignore.
+- El sitio vive al día (eea07e4) con las 8 cuentas del panel intactas y las features de la tarea 13 desplegadas por Actions.
+- Despliegues futuros = push a main (nada más).
