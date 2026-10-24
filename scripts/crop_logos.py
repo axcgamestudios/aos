@@ -3,6 +3,8 @@
    - Finder/Calculator/Axcgames: cuadrar por REPLICACIÓN de bordes (sin perder arte)
    - PNGs ya cuadrados con alfa (safari/notes/settings): trim de alfa + reencuadre
    Salida: PNG 512x512 en public/icons/
+   2026-10 t18: segunda tanda del usuario (Files/Navegador/Settings .jpg + Wallpaper.JPG).
+   Los jobs nuevos van AL FINAL para ganar sobre los antiguos si repiten destino.
 """
 from PIL import Image, ImageOps
 import os
@@ -61,6 +63,10 @@ jobs = [
     ("Safari_logo.PNG", "safari.png", "alpha"),
     ("Notes_logo.PNG", "notes.png", "alpha"),
     ("Settings_logo.PNG", "settings.png", "alpha"),
+    # t18: logos nuevos del usuario (subidos al repo) — al final para ganar
+    ("Files.jpg", "finder.png", "replicate"),
+    ("Navegador.jpg", "safari.png", "replicate"),
+    ("Settings.jpg", "settings.png", "replicate"),
 ]
 
 for src, dst, mode in jobs:
@@ -71,5 +77,14 @@ for src, dst, mode in jobs:
         sq = alpha_icon(im.convert("RGBA"))
     sq.save(os.path.join(OUT, dst), "PNG")
     print(f"{src} {im.size} -> {dst} {sq.size} ({mode})")
+
+# --- t18: fondo de pantalla predeterminado nuevo (Wallpaper.JPG -> axcnavy.png) ---
+# Mismo formato que los wallpapers existentes: bytes JPEG con extensión .png
+# (idéntico mecanismo que goldengate.png y compañía en el sitio en vivo).
+wp_src = "Wallpaper.JPG"
+wp_dst = os.path.join("public", "wallpapers", "axcnavy.png")
+wp = ImageOps.exif_transpose(Image.open(wp_src)).convert("RGB")
+wp.save(wp_dst, "JPEG", quality=88, optimize=True)  # re-guardar sin EXIF, ligero
+print(f"{wp_src} {wp.size} -> {wp_dst} {os.path.getsize(wp_dst)//1024}KB")
 
 print("OK")
